@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"D:\\\\src\\\\AI\\\\kimbeggar-main\" && venv/Scripts/python scripts/test_kis.py 2>&1)"
+    ]
+  }
+}
