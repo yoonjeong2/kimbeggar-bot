@@ -54,7 +54,16 @@ jobs:
           pip install -r requirements-dev.txt
 
       # ----------------------------------------------------------------
-      # 5. Lint — flake8
+      # 5. Format check — black
+      #    Fails if any file would be reformatted by black.
+      #    Configure line-length in setup.cfg [tool:black].
+      # ----------------------------------------------------------------
+      - name: Check formatting with black
+        run: |
+          black --check --diff .
+
+      # ----------------------------------------------------------------
+      # 6. Lint — flake8
       #    E501 (line too long) is governed by setup.cfg (max-line-length=100).
       #    The venv/ directory is excluded automatically via setup.cfg.
       # ----------------------------------------------------------------
@@ -66,20 +75,37 @@ jobs:
             --format="::error file=%(path)s,line=%(row)d,col=%(col)d::%(text)s"
 
       # ----------------------------------------------------------------
-      # 6. Test — pytest with coverage
+      # 7. Static analysis — pylint
+      #    --fail-under=7.0 allows minor style issues while blocking
+      #    real errors (undefined variables, wrong argument counts, etc.).
+      #    Disabled checks are configured in setup.cfg [tool:pylint.*].
+      # ----------------------------------------------------------------
+      - name: Lint with pylint
+        run: |
+          pylint strategy/ notifier/ data_agent/ config/ backtest/ main.py \
+            --fail-under=7.0 \
+            --output-format=colorized
+        continue-on-error: true
+
+      # ----------------------------------------------------------------
+      # 8. Test — pytest with coverage
       #    Tests do NOT require .env or live API credentials; all external
-      #    dependencies are mocked in conftest.py.
+      #    dependencies are mocked in conftest.py / test files.
       # ----------------------------------------------------------------
       - name: Test with pytest
         run: |
           pytest tests/ \
             --cov=strategy \
+            --cov=notifier \
+            --cov=main \
+            --cov=config \
+            --cov=backtest \
             --cov-report=term-missing \
             --cov-report=xml \
             -v
 
       # ----------------------------------------------------------------
-      # 7. Upload coverage report as an artifact (optional, for review)
+      # 9. Upload coverage report as an artifact (optional, for review)
       # ----------------------------------------------------------------
       - name: Upload coverage report
         if: always()

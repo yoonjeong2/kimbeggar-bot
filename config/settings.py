@@ -48,15 +48,9 @@ class Settings:
     """
 
     # --- KIS API -------------------------------------------------------
-    kis_app_key: str = field(
-        default_factory=lambda: os.getenv("KIS_APP_KEY", "")
-    )
-    kis_app_secret: str = field(
-        default_factory=lambda: os.getenv("KIS_APP_SECRET", "")
-    )
-    kis_account_no: str = field(
-        default_factory=lambda: os.getenv("KIS_ACCOUNT_NO", "")
-    )
+    kis_app_key: str = field(default_factory=lambda: os.getenv("KIS_APP_KEY", ""))
+    kis_app_secret: str = field(default_factory=lambda: os.getenv("KIS_APP_SECRET", ""))
+    kis_account_no: str = field(default_factory=lambda: os.getenv("KIS_ACCOUNT_NO", ""))
     kis_account_product_code: str = field(
         default_factory=lambda: os.getenv("KIS_ACCOUNT_PRODUCT_CODE", "01")
     )
@@ -81,9 +75,7 @@ class Settings:
     monitor_interval_minutes: int = field(
         default_factory=lambda: int(os.getenv("MONITOR_INTERVAL_MINUTES", "5"))
     )
-    rsi_period: int = field(
-        default_factory=lambda: int(os.getenv("RSI_PERIOD", "14"))
-    )
+    rsi_period: int = field(default_factory=lambda: int(os.getenv("RSI_PERIOD", "14")))
     rsi_oversold: float = field(
         default_factory=lambda: float(os.getenv("RSI_OVERSOLD", "30"))
     )
@@ -123,9 +115,7 @@ class Settings:
         self.kakao_rest_api_key = os.getenv(
             "KAKAO_REST_API_KEY", self.kakao_rest_api_key
         )
-        self.kakao_token_file = os.getenv(
-            "KAKAO_TOKEN_FILE", self.kakao_token_file
-        )
+        self.kakao_token_file = os.getenv("KAKAO_TOKEN_FILE", self.kakao_token_file)
         self.dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
 
     @property

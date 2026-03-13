@@ -35,10 +35,10 @@ from strategy.hedge_logic import (
 )
 from strategy.signal import SignalEngine, SignalType
 
-
 # ===========================================================================
 # strategy.indicators
 # ===========================================================================
+
 
 class TestCalculateRsi:
     """Tests for ``calculate_rsi``."""
@@ -143,8 +143,8 @@ class TestDetectGoldenCross:
 
     def test_ascending_series_triggers_cross(self):
         """V-shaped series: sharp fall then recovery → SMA5 crosses above SMA20."""
-        fall = pd.Series(range(100, 50, -1), dtype=float)   # 50 bars down
-        rise = pd.Series(range(50, 110), dtype=float)        # 60 bars up
+        fall = pd.Series(range(100, 50, -1), dtype=float)  # 50 bars down
+        rise = pd.Series(range(50, 110), dtype=float)  # 60 bars up
         prices = pd.concat([fall, rise], ignore_index=True)
         sma5 = calculate_moving_average(prices, period=5)
         sma20 = calculate_moving_average(prices, period=20)
@@ -166,8 +166,8 @@ class TestDetectDeadCross:
 
     def test_descending_series_triggers_dead_cross(self):
         """A-shaped series: rise then sharp fall → SMA5 crosses below SMA20."""
-        rise = pd.Series(range(50, 110), dtype=float)        # 60 bars up
-        fall = pd.Series(range(110, 50, -1), dtype=float)    # 60 bars down
+        rise = pd.Series(range(50, 110), dtype=float)  # 60 bars up
+        fall = pd.Series(range(110, 50, -1), dtype=float)  # 60 bars down
         prices = pd.concat([rise, fall], ignore_index=True)
         sma5 = calculate_moving_average(prices, period=5)
         sma20 = calculate_moving_average(prices, period=20)
@@ -211,6 +211,7 @@ class TestCalculateVolatility:
 # strategy.hedge_logic
 # ===========================================================================
 
+
 class TestCalculateHedgeRatio:
     """Tests for ``calculate_hedge_ratio``."""
 
@@ -249,8 +250,9 @@ class TestCalculateHedgeRatio:
         base = 0.30
         idx_rate = -2.0
 
-        ma_dev = (long_ma - price) / long_ma          # ≈ 0.0333
+        ma_dev = (long_ma - price) / long_ma  # ≈ 0.0333
         from strategy.hedge_logic import MA_DEVIATION_SCALE, INDEX_DROP_SCALE
+
         expected = base + ma_dev * MA_DEVIATION_SCALE + (2.0 / 100) * INDEX_DROP_SCALE
         result = calculate_hedge_ratio(price, long_ma, base, idx_rate)
         assert result == pytest.approx(expected, abs=1e-4)
@@ -309,6 +311,7 @@ class TestDescribeHedge:
 # strategy.signal — SignalEngine
 # ===========================================================================
 
+
 class TestCheckStopLoss:
     """Tests for ``SignalEngine.check_stop_loss``."""
 
@@ -337,7 +340,7 @@ class TestCheckBuySignal:
         """Return (prices, rsi, short_ma, long_ma) with golden cross at [-1]."""
         n = 25
         prices = pd.Series([100.0] * n)
-        rsi = pd.Series([50.0] * (n - 1) + [25.0])      # oversold last bar
+        rsi = pd.Series([50.0] * (n - 1) + [25.0])  # oversold last bar
         # short was below long, now crosses above
         short_ma = pd.Series([79.0] * (n - 1) + [81.0])
         long_ma = pd.Series([80.0] * n)
@@ -353,8 +356,8 @@ class TestCheckBuySignal:
         engine = SignalEngine(mock_settings)
         n = 25
         prices = pd.Series([100.0] * n)
-        rsi = pd.Series([25.0] * n)           # oversold
-        short_ma = pd.Series([75.0] * n)      # short always below long → no cross
+        rsi = pd.Series([25.0] * n)  # oversold
+        short_ma = pd.Series([75.0] * n)  # short always below long → no cross
         long_ma = pd.Series([80.0] * n)
         assert engine.check_buy_signal(prices, rsi, short_ma, long_ma) is False
 
@@ -363,7 +366,7 @@ class TestCheckBuySignal:
         engine = SignalEngine(mock_settings)
         n = 25
         prices = pd.Series([100.0] * n)
-        rsi = pd.Series([50.0] * n)            # neutral RSI
+        rsi = pd.Series([50.0] * n)  # neutral RSI
         short_ma = pd.Series([79.0] * (n - 1) + [81.0])
         long_ma = pd.Series([80.0] * n)
         assert engine.check_buy_signal(prices, rsi, short_ma, long_ma) is False
@@ -375,7 +378,7 @@ class TestCheckSellSignal:
     def _make_dead_cross_at_last(self):
         n = 25
         prices = pd.Series([100.0] * n)
-        rsi = pd.Series([50.0] * (n - 1) + [75.0])   # overbought last bar
+        rsi = pd.Series([50.0] * (n - 1) + [75.0])  # overbought last bar
         short_ma = pd.Series([81.0] * (n - 1) + [79.0])
         long_ma = pd.Series([80.0] * n)
         return prices, rsi, short_ma, long_ma
@@ -390,7 +393,7 @@ class TestCheckSellSignal:
         n = 25
         prices = pd.Series([100.0] * n)
         rsi = pd.Series([75.0] * n)
-        short_ma = pd.Series([85.0] * n)    # short always above long → no cross
+        short_ma = pd.Series([85.0] * n)  # short always above long → no cross
         long_ma = pd.Series([80.0] * n)
         assert engine.check_sell_signal(prices, rsi, short_ma, long_ma) is False
 
@@ -398,7 +401,7 @@ class TestCheckSellSignal:
         engine = SignalEngine(mock_settings)
         n = 25
         prices = pd.Series([100.0] * n)
-        rsi = pd.Series([50.0] * n)          # neutral RSI
+        rsi = pd.Series([50.0] * n)  # neutral RSI
         short_ma = pd.Series([81.0] * (n - 1) + [79.0])
         long_ma = pd.Series([80.0] * n)
         assert engine.check_sell_signal(prices, rsi, short_ma, long_ma) is False
@@ -448,7 +451,9 @@ class TestSignalEngineEvaluate:
         signal = engine.evaluate("005930", ohlcv_ascending)
         assert signal.symbol == "005930"
 
-    def test_price_is_last_close(self, mock_settings, ohlcv_ascending, ascending_prices):
+    def test_price_is_last_close(
+        self, mock_settings, ohlcv_ascending, ascending_prices
+    ):
         engine = SignalEngine(mock_settings)
         signal = engine.evaluate("TEST", ohlcv_ascending)
         assert signal.price == pytest.approx(float(ascending_prices.iloc[-1]))

@@ -26,7 +26,6 @@ from tenacity import (
 from config.settings import Settings
 from config.ssl import ssl_verify
 
-
 _logger = logging.getLogger(__name__)
 
 _TOKEN_PATH = "/oauth2/tokenP"
@@ -108,9 +107,7 @@ class KISClient:
 
         self._access_token = token
         self._token_expires_at = datetime.now() + timedelta(seconds=expires_in)
-        self._logger.info(
-            "KIS access token issued; expires in %d seconds.", expires_in
-        )
+        self._logger.info("KIS access token issued; expires in %d seconds.", expires_in)
         return self._access_token
 
     def _is_token_valid(self) -> bool:
@@ -191,9 +188,7 @@ class KISClient:
             )
         return data["output2"]
 
-    def get_ohlcv_daily(
-        self, symbol: str, period: int = 60
-    ) -> List[Dict[str, Any]]:
+    def get_ohlcv_daily(self, symbol: str, period: int = 60) -> List[Dict[str, Any]]:
         """Retrieve daily OHLCV candles for a domestic stock.
 
         Args:
@@ -297,7 +292,9 @@ class KISClient:
         if method.upper() == "GET":
             data = self._get_with_retry(path, headers, params or {})
         else:
-            data = self._post_with_retry(path, headers=headers, json_body=json_body or {})
+            data = self._post_with_retry(
+                path, headers=headers, json_body=json_body or {}
+            )
 
         rt_cd = data.get("rt_cd")
         if rt_cd is not None and rt_cd != "0":
@@ -305,7 +302,10 @@ class KISClient:
             msg1 = data.get("msg1", "")
             self._logger.error(
                 "KIS API error on %s | rt_cd=%s | msg_cd=%s | msg=%s",
-                path, rt_cd, msg_cd, msg1,
+                path,
+                rt_cd,
+                msg_cd,
+                msg1,
             )
             # EGW00123: access token invalid or expired — force re-issue on
             # the next call by clearing the cached token.
@@ -317,8 +317,7 @@ class KISClient:
                 self._access_token = None
                 self._token_expires_at = None
             raise RuntimeError(
-                f"KIS API error on {path} "
-                f"(rt_cd={rt_cd}, msg_cd={msg_cd}): {msg1}"
+                f"KIS API error on {path} " f"(rt_cd={rt_cd}, msg_cd={msg_cd}): {msg1}"
             )
         return data
 

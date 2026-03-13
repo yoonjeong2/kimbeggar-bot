@@ -21,11 +21,11 @@ def _ssl_verify() -> bool:
         return False
     return True
 
+
 # 프로젝트 루트를 sys.path에 추가
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from notifier.kakao_token_manager import KakaoTokenManager
-
 
 AUTH_URL = "https://kauth.kakao.com/oauth/authorize"
 TOKEN_URL = "https://kauth.kakao.com/oauth/token"
@@ -96,7 +96,9 @@ def main() -> None:
         sys.exit(1)
 
     if "error" in token_data:
-        print(f"[ERROR] 토큰 발급 실패: {token_data.get('error')} - {token_data.get('error_description')}")
+        print(
+            f"[ERROR] 토큰 발급 실패: {token_data.get('error')} - {token_data.get('error_description')}"
+        )
         sys.exit(1)
 
     # 만료 시각 계산
@@ -120,7 +122,9 @@ def main() -> None:
 
     settings = Settings()
     notifier = KakaoNotifier(settings)
-    success = notifier.send_message("카카오 알림 설정 완료! KimBeggar 봇이 연결되었습니다.")
+    success = notifier.send_message(
+        "카카오 알림 설정 완료! KimBeggar 봇이 연결되었습니다."
+    )
 
     if success:
         print("[성공] 카카오톡 '나에게 보내기'로 테스트 메시지가 전송되었습니다.")

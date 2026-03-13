@@ -36,7 +36,6 @@ import pandas as pd
 from backtest.strategy import KimBeggarStrategy
 from config.settings import Settings
 
-
 _logger = logging.getLogger(__name__)
 
 # KRX standard one-way commission rate
@@ -142,7 +141,8 @@ def run_backtest(
 
     _logger.info(
         "Starting backtest: %d bars | cash=%.0f",
-        len(df), initial_cash,
+        len(df),
+        initial_cash,
     )
     results = cerebro.run()
     final_value = cerebro.broker.getvalue()
@@ -173,6 +173,7 @@ def run_backtest(
 # ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
+
 
 def _normalise_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Return a copy of *df* with lowercased column names.

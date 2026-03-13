@@ -66,7 +66,7 @@ def run_cycle(
             # Compute a dynamic hedge ratio using KOSPI change rate
             index_change_rate = float(kospi_data.get("bstp_nmix_prdy_ctrt", "0"))
             ratio = calculate_hedge_ratio(
-                current_price=0.0,   # no single stock — use index signal only
+                current_price=0.0,  # no single stock — use index signal only
                 long_ma=0.0,
                 base_ratio=settings.hedge_ratio,
                 index_change_rate=index_change_rate,
@@ -93,7 +93,7 @@ def run_cycle(
             ohlcv_data = kis.get_ohlcv_daily(symbol, period=60)
 
             # 2b. Fetch real-time price to update the last close value
-            price_data    = kis.get_current_price(symbol)
+            price_data = kis.get_current_price(symbol)
             current_price = float(price_data.get("stck_prpr", 0))
 
             # Patch the latest close in OHLCV so indicators reflect live price
@@ -131,9 +131,7 @@ def run_cycle(
             # 2e. Track entry price when a buy fires
             if signal.signal_type == SignalType.BUY:
                 entry_prices[symbol] = signal.price
-                logger.info(
-                    "%s: entry price recorded at %.0f", symbol, signal.price
-                )
+                logger.info("%s: entry price recorded at %.0f", symbol, signal.price)
 
             # Clear entry price after stop-loss or sell
             if signal.signal_type in (SignalType.STOP_LOSS, SignalType.SELL):
@@ -165,8 +163,8 @@ def main() -> None:
     )
 
     # Initialise API clients and engine
-    kis      = KISClient(settings)
-    engine   = SignalEngine(settings)
+    kis = KISClient(settings)
+    engine = SignalEngine(settings)
     notifier = NotifierService([KakaoNotifier(settings)])
 
     # In-memory entry-price tracker { symbol: entry_price }

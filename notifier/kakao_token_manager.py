@@ -24,7 +24,6 @@ from tenacity import (
 
 from config.ssl import ssl_verify
 
-
 _logger = logging.getLogger(__name__)
 
 TOKEN_URL: str = "https://kauth.kakao.com/oauth/token"
@@ -148,7 +147,9 @@ class KakaoTokenManager:
         """
         refresh_token = self._token_data.get("refresh_token")
         if not refresh_token:
-            self._logger.error("No refresh_token available.  Re-authentication required.")
+            self._logger.error(
+                "No refresh_token available.  Re-authentication required."
+            )
             return False
 
         if self._is_refresh_token_expired():

@@ -24,10 +24,10 @@ def _ssl_verify() -> bool:
     return True
 
 
-APP_KEY    = os.getenv("KIS_APP_KEY", "")
+APP_KEY = os.getenv("KIS_APP_KEY", "")
 APP_SECRET = os.getenv("KIS_APP_SECRET", "")
-IS_REAL    = os.getenv("KIS_IS_REAL", "false").strip().lower() == "true"
-BASE_URL   = (
+IS_REAL = os.getenv("KIS_IS_REAL", "false").strip().lower() == "true"
+BASE_URL = (
     "https://openapi.koreainvestment.com:9443"
     if IS_REAL
     else "https://openapivts.koreainvestment.com:29443"
@@ -73,7 +73,9 @@ def get_current_price(token: str, symbol: str) -> None:
         "FID_COND_MRKT_DIV_CODE": "J",
         "FID_INPUT_ISCD": symbol,
     }
-    resp = requests.get(url, headers=headers, params=params, timeout=10, verify=_ssl_verify())
+    resp = requests.get(
+        url, headers=headers, params=params, timeout=10, verify=_ssl_verify()
+    )
     if not resp.ok:
         print(f"[ERROR] 시세 조회 실패 (HTTP {resp.status_code})")
         try:
@@ -84,27 +86,39 @@ def get_current_price(token: str, symbol: str) -> None:
 
     data = resp.json()
     output = data.get("output", {})
-    rt_cd  = data.get("rt_cd")
-    msg    = data.get("msg1", "")
+    rt_cd = data.get("rt_cd")
+    msg = data.get("msg1", "")
 
     if rt_cd != "0":
         print(f"[ERROR] API 오류 (rt_cd={rt_cd}): {msg}")
         print(f"  전체 응답: {data}")
         sys.exit(1)
 
-    price      = output.get("stck_prpr", "N/A")   # 현재가
-    prev_close = output.get("stck_sdpr", "N/A")   # 전일종가
-    change_rt  = output.get("prdy_ctrt", "N/A")   # 전일대비율(%)
-    volume     = output.get("acml_vol", "N/A")     # 누적거래량
+    price = output.get("stck_prpr", "N/A")  # 현재가
+    prev_close = output.get("stck_sdpr", "N/A")  # 전일종가
+    change_rt = output.get("prdy_ctrt", "N/A")  # 전일대비율(%)
+    volume = output.get("acml_vol", "N/A")  # 누적거래량
 
     print()
     print(f"{'=' * 40}")
     print(f"  삼성전자({symbol}) 현재가 조회 결과")
     print(f"{'=' * 40}")
-    print(f"  현재가    : {int(price):,}원" if price != "N/A" else f"  현재가    : {price}")
-    print(f"  전일종가  : {int(prev_close):,}원" if prev_close != "N/A" else f"  전일종가  : {prev_close}")
+    print(
+        f"  현재가    : {int(price):,}원"
+        if price != "N/A"
+        else f"  현재가    : {price}"
+    )
+    print(
+        f"  전일종가  : {int(prev_close):,}원"
+        if prev_close != "N/A"
+        else f"  전일종가  : {prev_close}"
+    )
     print(f"  전일대비율: {change_rt}%")
-    print(f"  누적거래량: {int(volume):,}주" if volume != "N/A" else f"  누적거래량: {volume}")
+    print(
+        f"  누적거래량: {int(volume):,}주"
+        if volume != "N/A"
+        else f"  누적거래량: {volume}"
+    )
     print(f"{'=' * 40}")
     print(f"  환경: {'실전투자' if IS_REAL else '모의투자'} | 서버: {BASE_URL}")
     print(f"{'=' * 40}")

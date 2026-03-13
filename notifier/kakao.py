@@ -26,7 +26,6 @@ from notifier.base import BaseNotifier
 from notifier.kakao_token_manager import KakaoTokenManager
 from strategy.signal import Signal, SignalType
 
-
 _logger = logging.getLogger(__name__)
 
 MEMO_API_URL = "https://kapi.kakao.com/v2/api/talk/memo/default/send"
@@ -49,13 +48,6 @@ class KakaoNotifier(BaseNotifier):
         settings: Application-wide ``Settings`` instance injected at
             construction time (Dependency-Inversion Principle).
     """
-
-    SIGNAL_LABELS: Dict[SignalType, str] = {
-        SignalType.BUY: "[매수]",
-        SignalType.SELL: "[매도]",
-        SignalType.STOP_LOSS: "[긴급:손절]",
-        SignalType.HEDGE: "[헤지]",
-    }
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -178,23 +170,64 @@ class KakaoNotifier(BaseNotifier):
         return resp.json()
 
     def _format_signal_message(self, signal: Signal) -> str:
-        """Format a trading signal into a human-readable Kakao message string.
+        """Format a trading signal into a user-friendly Kakao message string.
+
+        Message examples::
+
+            📈 매수 시그널: 종목 005930
+            RSI 28.3 (과매도) | 골든크로스 확인
+            현재가: 71,500원
+            2026-03-13 14:30
+
+            🚨 긴급 손절: 종목 005930
+            현재가: 67,800원 (-5.2%)
+            → 즉시 포지션 청산 필요
+            2026-03-13 14:30
 
         Args:
-            signal: ``Signal`` object with type, symbol, and price.
+            signal: ``Signal`` object with type, symbol, price, and indicators.
 
         Returns:
-            Multi-line string ready to be sent as a Kakao text template.
+            Multi-line string (≤ 200 chars) ready for the Kakao text template.
         """
-        label = self.SIGNAL_LABELS.get(signal.signal_type, "[알림]")
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        lines = [
-            f"{label} {signal.symbol}",
-            f"시각: {timestamp}",
-            f"가격: {signal.price:,.0f}원",
-        ]
+        _ICONS = {
+            SignalType.BUY: "📈",
+            SignalType.SELL: "📉",
+            SignalType.STOP_LOSS: "🚨",
+            SignalType.HEDGE: "⚠️",
+        }
+        _LABELS = {
+            SignalType.BUY: "매수 시그널",
+            SignalType.SELL: "매도 시그널",
+            SignalType.STOP_LOSS: "긴급 손절",
+            SignalType.HEDGE: "헤지 경고",
+        }
+
+        icon = _ICONS.get(signal.signal_type, "🔔")
+        label = _LABELS.get(signal.signal_type, "알림")
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+        lines = [f"{icon} {label}: 종목 {signal.symbol}"]
+
+        # RSI + crossover detail for BUY / SELL signals
+        if signal.rsi is not None and signal.signal_type in (
+            SignalType.BUY,
+            SignalType.SELL,
+        ):
+            rsi_tag = "과매도" if signal.signal_type == SignalType.BUY else "과매수"
+            cross_tag = (
+                "골든크로스 확인"
+                if signal.signal_type == SignalType.BUY
+                else "데드크로스 확인"
+            )
+            lines.append(f"RSI {signal.rsi:.1f} ({rsi_tag}) | {cross_tag}")
+
+        lines.append(f"현재가: {signal.price:,.0f}원")
+
         if signal.signal_type == SignalType.STOP_LOSS:
-            lines.append("→ 즉시 손절 필요")
+            lines.append("→ 즉시 포지션 청산 필요")
         elif signal.signal_type == SignalType.HEDGE:
-            lines.append("→ 인버스 ETF 헤지 진입")
+            lines.append("→ 인버스 ETF 포지션 진입 권고")
+
+        lines.append(timestamp)
         return "\n".join(lines)

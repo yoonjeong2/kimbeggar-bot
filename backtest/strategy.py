@@ -20,7 +20,6 @@ import logging
 
 import backtrader as bt
 
-
 _logger = logging.getLogger(__name__)
 
 
@@ -58,12 +57,8 @@ class KimBeggarStrategy(bt.Strategy):
             period=self.p.rsi_period,
             safediv=True,
         )
-        self.sma_short = bt.indicators.SMA(
-            self.data.close, period=self.p.ma_short
-        )
-        self.sma_long = bt.indicators.SMA(
-            self.data.close, period=self.p.ma_long
-        )
+        self.sma_short = bt.indicators.SMA(self.data.close, period=self.p.ma_short)
+        self.sma_long = bt.indicators.SMA(self.data.close, period=self.p.ma_long)
         # +1 when short crosses above long (golden cross); -1 for dead cross
         self.crossover = bt.indicators.CrossOver(self.sma_short, self.sma_long)
 
@@ -83,7 +78,8 @@ class KimBeggarStrategy(bt.Strategy):
                 self._entry_price = order.executed.price
                 _logger.debug(
                     "BUY executed @ %.2f  size=%d",
-                    order.executed.price, order.executed.size,
+                    order.executed.price,
+                    order.executed.size,
                 )
             else:
                 _logger.debug(
@@ -108,39 +104,35 @@ class KimBeggarStrategy(bt.Strategy):
         if not self.position:
             # --- BUY condition -----------------------------------------
             # RSI oversold AND golden cross (short SMA just crossed above long)
-            if (
-                self.rsi[0] <= self.p.rsi_oversold
-                and self.crossover[0] > 0
-            ):
+            if self.rsi[0] <= self.p.rsi_oversold and self.crossover[0] > 0:
                 size = int(self.broker.getcash() // current_price)
                 if size > 0:
                     _logger.debug(
                         "BUY signal @ %.2f  RSI=%.1f  size=%d",
-                        current_price, self.rsi[0], size,
+                        current_price,
+                        self.rsi[0],
+                        size,
                     )
                     self._order = self.buy(size=size)
         else:
             # --- STOP-LOSS check (highest priority) --------------------
-            if (
-                self._entry_price > 0
-                and current_price
-                <= self._entry_price * (1.0 - self.p.stop_loss_rate)
+            if self._entry_price > 0 and current_price <= self._entry_price * (
+                1.0 - self.p.stop_loss_rate
             ):
                 _logger.debug(
                     "STOP-LOSS triggered @ %.2f  entry=%.2f",
-                    current_price, self._entry_price,
+                    current_price,
+                    self._entry_price,
                 )
                 self._order = self.close()
                 return
 
             # --- SELL condition ----------------------------------------
             # RSI overbought AND dead cross (short SMA just crossed below long)
-            if (
-                self.rsi[0] >= self.p.rsi_overbought
-                and self.crossover[0] < 0
-            ):
+            if self.rsi[0] >= self.p.rsi_overbought and self.crossover[0] < 0:
                 _logger.debug(
                     "SELL signal @ %.2f  RSI=%.1f",
-                    current_price, self.rsi[0],
+                    current_price,
+                    self.rsi[0],
                 )
                 self._order = self.close()

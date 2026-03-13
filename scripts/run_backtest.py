@@ -30,7 +30,6 @@ from config.settings import Settings
 from data_agent.kis_api import KISClient
 from backtest.runner import run_backtest
 
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(name)s — %(message)s",

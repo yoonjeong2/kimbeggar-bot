@@ -8,7 +8,6 @@ import logging.handlers
 import os
 from pathlib import Path
 
-
 LOG_DIR = Path(__file__).parent.parent / "logs"
 LOG_FILE = LOG_DIR / "bot.log"
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"

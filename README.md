@@ -14,11 +14,15 @@
 5. [의존성 & 기술 스택](#5-의존성--기술-스택)
 6. [설치 및 환경 구성](#6-설치-및-환경-구성)
 7. [카카오 OAuth 최초 인증](#7-카카오-oauth-최초-인증)
-8. [실행](#8-실행)
-9. [연결 테스트](#9-연결-테스트)
-10. [설계 원칙 & 패턴](#10-설계-원칙--패턴)
-11. [운영 체크리스트](#11-운영-체크리스트)
-12. [확장 가이드 — 새 알림 채널 추가](#12-확장-가이드--새-알림-채널-추가)
+8. [실행 & 샘플 출력 로그](#8-실행--샘플-출력-로그)
+9. [알림 메시지 형식](#9-알림-메시지-형식)
+10. [MVP 데모 (API 없이 알림 테스트)](#10-mvp-데모-api-없이-알림-테스트)
+11. [백테스팅](#11-백테스팅)
+12. [연결 테스트](#12-연결-테스트)
+13. [설계 원칙 & 패턴](#13-설계-원칙--패턴)
+14. [운영 체크리스트](#14-운영-체크리스트)
+15. [Docker (예정)](#15-docker-예정)
+16. [확장 가이드 — 새 알림 채널 추가](#16-확장-가이드--새-알림-채널-추가)
 
 ---
 
@@ -265,7 +269,7 @@ python scripts/kakao_auth_setup.py
 
 ---
 
-## 8. 실행
+## 8. 실행 & 샘플 출력 로그
 
 ```bash
 # 봇 실행 (메인 루프)
@@ -280,9 +284,123 @@ python main.py
 4. 시그널 발생 시 `NotifierService`를 통해 카카오톡 알림 전송
 5. 모든 이벤트는 `logs/bot.log`에 타임스탬프와 함께 기록
 
+### `python main.py` 실행 시 출력되는 로그 예시
+
+```
+2026-03-13 09:01:00 [INFO] __main__: KimBeggar bot starting up.
+2026-03-13 09:01:00 [INFO] __main__: Watching 3 symbols every 5 minute(s): 005930, 000660, 035420
+2026-03-13 09:01:01 [INFO] data_agent.kis_api: KIS access token issued; expires in 86400 seconds.
+2026-03-13 09:01:01 [INFO] __main__: === Monitoring cycle start ===
+2026-03-13 09:01:02 [INFO] __main__: 005930 | HOLD    | price=71500 | RSI=52.3
+2026-03-13 09:01:03 [INFO] __main__: 000660 | HOLD    | price=183000 | RSI=44.1
+2026-03-13 09:01:04 [INFO] __main__: 035420 | BUY     | price=214500 | RSI=27.8
+2026-03-13 09:01:04 [INFO] notifier.kakao: Kakao message sent successfully.
+2026-03-13 09:01:04 [INFO] __main__: 035420: entry price recorded at 214500
+2026-03-13 09:01:04 [INFO] __main__: === Monitoring cycle complete ===
+2026-03-13 09:01:04 [INFO] __main__: Scheduler active — next run in 5 minute(s).
+
+# 5분 뒤 — 코스피 급락 감지
+2026-03-13 09:06:04 [INFO] __main__: === Monitoring cycle start ===
+2026-03-13 09:06:05 [WARNING] __main__: HEDGE alert sent: KOSPI -2.10%
+2026-03-13 09:06:05 [INFO] notifier.kakao: Kakao message sent successfully.
+2026-03-13 09:06:06 [INFO] __main__: 035420 | STOP_LOSS | price=203500 | RSI=31.2
+2026-03-13 09:06:06 [INFO] notifier.kakao: Kakao message sent successfully.
+2026-03-13 09:06:06 [INFO] __main__: === Monitoring cycle complete ===
+```
+
 ---
 
-## 9. 연결 테스트
+## 9. 알림 메시지 형식
+
+카카오톡으로 전송되는 메시지 예시:
+
+**매수 시그널**
+```
+📈 매수 시그널: 종목 035420
+RSI 27.8 (과매도) | 골든크로스 확인
+현재가: 214,500원
+2026-03-13 09:01
+```
+
+**긴급 손절**
+```
+🚨 긴급 손절: 종목 035420
+현재가: 203,500원
+→ 즉시 포지션 청산 필요
+2026-03-13 09:06
+```
+
+**헤지 경고**
+```
+⚠️ 헤지 경고: 시장 급락
+현재가: 0원
+→ 인버스 ETF 포지션 진입 권고
+2026-03-13 09:06
+```
+
+---
+
+## 10. MVP 데모 (API 없이 알림 테스트)
+
+KIS API 연결 없이 더미 데이터로 시그널을 생성하고 카카오톡 알림을 발송합니다.
+
+```bash
+# BUY 시그널 데모 (기본값)
+python scripts/demo_signal.py
+
+# 다른 시그널 타입
+python scripts/demo_signal.py --type SELL
+python scripts/demo_signal.py --type STOP_LOSS
+python scripts/demo_signal.py --type HEDGE
+
+# 메시지 미리보기만 (카카오톡 전송 X)
+python scripts/demo_signal.py --dry-run
+```
+
+`--dry-run` 예시 출력:
+
+```
+──────────────────────────────────────────────────
+📈 매수 시그널: 종목 005930
+RSI 28.3 (과매도) | 골든크로스 확인
+현재가: 71,500원
+2026-03-13 14:30
+──────────────────────────────────────────────────
+  Length: 82 / 200 chars
+
+[dry-run] Message NOT sent.
+```
+
+---
+
+## 11. 백테스팅
+
+과거 OHLCV 데이터로 전략 성과를 검증합니다 ([backtrader](https://www.backtrader.com/) 기반).
+
+```bash
+# KIS API로 삼성전자 365일 데이터를 가져와 백테스트
+python scripts/run_backtest.py --symbol 005930 --days 365 --cash 10000000
+```
+
+샘플 결과:
+
+```
+=======================================================
+  Symbol        : 005930
+  Period        : 2025-03-13 ~ 2026-03-13
+  Bars          : 248
+  Initial cash  :      10,000,000 KRW
+  Final value   :      11,243,850 KRW
+  PnL           :      +1,243,850 KRW  (+12.44%)
+  Total trades  : 4
+  Won / Lost    : 3 / 1
+  Win rate      : 75.0%
+=======================================================
+```
+
+---
+
+## 12. 연결 테스트
 
 설치 완료 후 각 모듈을 독립적으로 검증합니다.
 
@@ -320,7 +438,7 @@ python scripts/test_kakao.py
 
 ---
 
-## 10. 설계 원칙 & 패턴
+## 13. 설계 원칙 & 패턴
 
 ### SSL 보안 — 환경별 조건부 검증
 
@@ -375,7 +493,7 @@ service.register(TelegramNotifier(settings))
 
 ---
 
-## 11. 운영 체크리스트
+## 14. 운영 체크리스트
 
 배포 전 확인:
 
@@ -389,7 +507,30 @@ service.register(TelegramNotifier(settings))
 
 ---
 
-## 12. 확장 가이드 — 새 알림 채널 추가
+## 15. Docker (예정)
+
+크로스 플랫폼 실행 환경 통일 및 Windows / Linux 동시 동작 검증을 위해 Docker 컨테이너화를 추가 예정입니다.
+
+```
+# 로드맵
+Dockerfile            ← 예정: python:3.11-slim 기반 이미지
+docker-compose.yml    ← 예정: 단일 커맨드 실행 환경
+```
+
+컨테이너화 완료 시 다음과 같이 실행 가능:
+
+```bash
+# 예정 사용법
+docker build -t kimbeggar .
+docker run --env-file .env kimbeggar
+```
+
+> Linux 컨테이너 내부에서는 시스템 CA 번들이 항상 최신 상태이므로
+> `DEV_MODE=false`로 안전하게 운영할 수 있습니다.
+
+---
+
+## 16. 확장 가이드 — 새 알림 채널 추가
 
 ### 텔레그램 추가 예시
 

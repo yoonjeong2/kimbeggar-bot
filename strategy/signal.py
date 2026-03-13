@@ -31,7 +31,6 @@ from strategy.indicators import (
     detect_golden_cross,
 )
 
-
 # Day-over-day index change rate (%) that triggers a HEDGE signal
 _HEDGE_TRIGGER_RATE: float = -1.5
 
@@ -130,7 +129,9 @@ class SignalEngine:
         if len(close) < self._MIN_CANDLES:
             self._logger.warning(
                 "%s: only %d candles available (need %d) — returning HOLD.",
-                symbol, len(close), self._MIN_CANDLES,
+                symbol,
+                len(close),
+                self._MIN_CANDLES,
             )
             return Signal(
                 symbol=symbol,
@@ -140,21 +141,28 @@ class SignalEngine:
             )
 
         # --- Compute indicators -----------------------------------------
-        rsi_series   = calculate_rsi(close, self._settings.rsi_period)
-        short_ma     = calculate_moving_average(close, self._settings.ma_short)
-        long_ma      = calculate_moving_average(close, self._settings.ma_long)
+        rsi_series = calculate_rsi(close, self._settings.rsi_period)
+        short_ma = calculate_moving_average(close, self._settings.ma_short)
+        long_ma = calculate_moving_average(close, self._settings.ma_long)
 
-        current_price   = float(close.iloc[-1])
-        current_rsi     = float(rsi_series.iloc[-1])   if not rsi_series.isna().all()   else None
-        current_short_ma = float(short_ma.iloc[-1])    if not short_ma.isna().all()     else None
-        current_long_ma  = float(long_ma.iloc[-1])     if not long_ma.isna().all()      else None
+        current_price = float(close.iloc[-1])
+        current_rsi = (
+            float(rsi_series.iloc[-1]) if not rsi_series.isna().all() else None
+        )
+        current_short_ma = (
+            float(short_ma.iloc[-1]) if not short_ma.isna().all() else None
+        )
+        current_long_ma = float(long_ma.iloc[-1]) if not long_ma.isna().all() else None
 
         self._logger.debug(
             "%s | price=%.0f  RSI=%.1f  MA%d=%.0f  MA%d=%.0f",
-            symbol, current_price,
+            symbol,
+            current_price,
             current_rsi or 0,
-            self._settings.ma_short, current_short_ma or 0,
-            self._settings.ma_long,  current_long_ma  or 0,
+            self._settings.ma_short,
+            current_short_ma or 0,
+            self._settings.ma_long,
+            current_long_ma or 0,
         )
 
         # --- Signal priority checks -------------------------------------
@@ -248,7 +256,7 @@ class SignalEngine:
         if rsi.isna().iloc[-1] or short_ma.isna().iloc[-1] or long_ma.isna().iloc[-1]:
             return False
 
-        rsi_oversold    = float(rsi.iloc[-1]) <= self._settings.rsi_oversold
+        rsi_oversold = float(rsi.iloc[-1]) <= self._settings.rsi_oversold
         golden_cross_now = bool(detect_golden_cross(short_ma, long_ma).iloc[-1])
         return rsi_oversold and golden_cross_now
 
@@ -326,6 +334,7 @@ class SignalEngine:
         if triggered:
             self._logger.info(
                 "Hedge signal triggered: index change rate %.2f%% ≤ %.1f%%",
-                change_rate, _HEDGE_TRIGGER_RATE,
+                change_rate,
+                _HEDGE_TRIGGER_RATE,
             )
         return triggered

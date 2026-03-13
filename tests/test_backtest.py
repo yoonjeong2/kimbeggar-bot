@@ -20,10 +20,10 @@ from unittest.mock import MagicMock
 
 from backtest.runner import BacktestResult, run_backtest, _normalise_columns
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_settings(
     rsi_period: int = 14,
@@ -49,10 +49,10 @@ def _make_ohlcv(prices: list, start: str = "2023-01-02") -> pd.DataFrame:
     arr = np.array(prices, dtype=float)
     return pd.DataFrame(
         {
-            "open":   arr * 0.99,
-            "high":   arr * 1.01,
-            "low":    arr * 0.98,
-            "close":  arr,
+            "open": arr * 0.99,
+            "high": arr * 1.01,
+            "low": arr * 0.98,
+            "close": arr,
             "volume": np.full(len(arr), 100_000.0),
         },
         index=idx,
@@ -75,9 +75,12 @@ def _descending_prices(n: int = 100, start: float = 70_000.0) -> list:
 # _normalise_columns
 # ---------------------------------------------------------------------------
 
+
 class TestNormaliseColumns:
     def test_lowercases_headers(self):
-        df = pd.DataFrame({"Open": [1], "High": [2], "Low": [1], "Close": [1], "Volume": [100]})
+        df = pd.DataFrame(
+            {"Open": [1], "High": [2], "Low": [1], "Close": [1], "Volume": [100]}
+        )
         result = _normalise_columns(df)
         assert list(result.columns) == ["open", "high", "low", "close", "volume"]
 
@@ -91,6 +94,7 @@ class TestNormaliseColumns:
 # run_backtest — validation errors
 # ---------------------------------------------------------------------------
 
+
 class TestRunBacktestValidation:
     def test_raises_on_empty_dataframe(self):
         df = pd.DataFrame(
@@ -101,7 +105,9 @@ class TestRunBacktestValidation:
             run_backtest(df, settings=_make_settings())
 
     def test_raises_on_missing_columns(self):
-        df = pd.DataFrame({"close": [1.0, 2.0]}, index=pd.date_range("2023-01-02", periods=2))
+        df = pd.DataFrame(
+            {"close": [1.0, 2.0]}, index=pd.date_range("2023-01-02", periods=2)
+        )
         with pytest.raises(ValueError, match="missing columns"):
             run_backtest(df, settings=_make_settings())
 
@@ -109,6 +115,7 @@ class TestRunBacktestValidation:
 # ---------------------------------------------------------------------------
 # run_backtest — result shape
 # ---------------------------------------------------------------------------
+
 
 class TestRunBacktestResult:
     def test_returns_backtest_result_instance(self):
@@ -177,6 +184,7 @@ class TestRunBacktestResult:
 # ---------------------------------------------------------------------------
 # run_backtest — stop-loss triggers with extreme drop
 # ---------------------------------------------------------------------------
+
 
 class TestRunBacktestStopLoss:
     def test_stop_loss_limits_drawdown(self):

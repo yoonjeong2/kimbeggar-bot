@@ -45,7 +45,7 @@ def calculate_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
     delta = prices.diff()
 
     # Separate price moves into gains and losses
-    gain = delta.clip(lower=0)   # negative deltas → 0
+    gain = delta.clip(lower=0)  # negative deltas → 0
     loss = -delta.clip(upper=0)  # positive deltas → 0
 
     # Wilder's smoothing = EMA with alpha = 1/period.
