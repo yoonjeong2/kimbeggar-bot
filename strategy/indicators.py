@@ -1,99 +1,111 @@
-"""
-기술적 보조지표 계산 모듈
-RSI, 이동평균, 데드크로스/골든크로스 등 지표 계산 함수
+"""Technical indicator calculation module.
+
+All indicators are computed with the ``ta`` library (pandas-compatible).
+Each function accepts and returns a ``pd.Series`` so results can be composed
+and passed directly into signal-detection logic.
+
+Indicator reference
+-------------------
+- RSI  : Wilder's Relative Strength Index (momentum oscillator, 0-100)
+- SMA  : Simple Moving Average (trend baseline)
+- EMA  : Exponential Moving Average (trend, more weight on recent prices)
+- Golden cross : short SMA crosses *above* long SMA  → bullish signal
+- Dead cross   : short SMA crosses *below* long SMA  → bearish signal
+- Volatility   : rolling standard deviation of close prices
 """
 
-from typing import List, Optional, Tuple
+from __future__ import annotations
 
-import numpy as np
 import pandas as pd
+from ta.momentum import RSIIndicator
+from ta.trend import EMAIndicator, SMAIndicator
 
 
 def calculate_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
-    """
-    RSI (Relative Strength Index) 계산
+    """Compute RSI using Wilder's smoothing method via the ``ta`` library.
 
     Args:
-        prices: 종가 시계열 데이터
-        period: RSI 계산 기간 (기본값 14)
+        prices: Close-price time series (chronological order, oldest first).
+        period: Look-back window (default 14).
 
     Returns:
-        RSI 값 시계열 (0~100 범위)
+        RSI values in the range [0, 100].  The first ``period`` entries will
+        be ``NaN``.
     """
-    # TODO: RSI 계산 구현 (Wilder's smoothing method)
-    pass
+    return RSIIndicator(close=prices, window=period).rsi()
 
 
 def calculate_moving_average(prices: pd.Series, period: int) -> pd.Series:
-    """
-    단순 이동평균(SMA) 계산
+    """Compute a Simple Moving Average (SMA).
 
     Args:
-        prices: 종가 시계열 데이터
-        period: 이동평균 기간
+        prices: Close-price time series.
+        period: Rolling window size.
 
     Returns:
-        이동평균 시계열
+        SMA series; the first ``period - 1`` entries are ``NaN``.
     """
-    # TODO: 단순 이동평균 계산 구현
-    pass
+    return SMAIndicator(close=prices, window=period).sma_indicator()
 
 
 def calculate_ema(prices: pd.Series, period: int) -> pd.Series:
-    """
-    지수 이동평균(EMA) 계산
+    """Compute an Exponential Moving Average (EMA).
 
     Args:
-        prices: 종가 시계열 데이터
-        period: EMA 계산 기간
+        prices: Close-price time series.
+        period: Span for the exponential decay factor.
 
     Returns:
-        EMA 시계열
+        EMA series; the first ``period - 1`` entries are ``NaN``.
     """
-    # TODO: 지수 이동평균 계산 구현
-    pass
-
-
-def detect_dead_cross(short_ma: pd.Series, long_ma: pd.Series) -> pd.Series:
-    """
-    데드크로스 감지 (단기 이동평균이 장기 이동평균 아래로 교차)
-
-    Args:
-        short_ma: 단기 이동평균 시계열
-        long_ma: 장기 이동평균 시계열
-
-    Returns:
-        데드크로스 발생 여부 불리언 시계열 (True: 데드크로스 발생)
-    """
-    # TODO: 데드크로스 감지 구현
-    pass
+    return EMAIndicator(close=prices, window=period).ema_indicator()
 
 
 def detect_golden_cross(short_ma: pd.Series, long_ma: pd.Series) -> pd.Series:
-    """
-    골든크로스 감지 (단기 이동평균이 장기 이동평균 위로 교차)
+    """Detect golden-cross events (short MA crosses *above* long MA).
+
+    A golden cross is identified at bar *t* when:
+        short_ma[t-1] < long_ma[t-1]  AND  short_ma[t] >= long_ma[t]
 
     Args:
-        short_ma: 단기 이동평균 시계열
-        long_ma: 장기 이동평균 시계열
+        short_ma: Short-window SMA series.
+        long_ma:  Long-window SMA series.
 
     Returns:
-        골든크로스 발생 여부 불리언 시계열 (True: 골든크로스 발생)
+        Boolean series — ``True`` on the bar where a golden cross occurred.
     """
-    # TODO: 골든크로스 감지 구현
-    pass
+    prev_below = short_ma.shift(1) < long_ma.shift(1)
+    curr_above = short_ma >= long_ma
+    return (prev_below & curr_above).fillna(False)
+
+
+def detect_dead_cross(short_ma: pd.Series, long_ma: pd.Series) -> pd.Series:
+    """Detect dead-cross events (short MA crosses *below* long MA).
+
+    A dead cross is identified at bar *t* when:
+        short_ma[t-1] >= long_ma[t-1]  AND  short_ma[t] < long_ma[t]
+
+    Args:
+        short_ma: Short-window SMA series.
+        long_ma:  Long-window SMA series.
+
+    Returns:
+        Boolean series — ``True`` on the bar where a dead cross occurred.
+    """
+    prev_above = short_ma.shift(1) >= long_ma.shift(1)
+    curr_below = short_ma < long_ma
+    return (prev_above & curr_below).fillna(False)
 
 
 def calculate_volatility(prices: pd.Series, period: int = 20) -> pd.Series:
-    """
-    변동성 계산 (표준편차 기반)
+    """Compute annualised rolling volatility (standard-deviation based).
 
     Args:
-        prices: 종가 시계열 데이터
-        period: 변동성 계산 기간
+        prices: Close-price time series.
+        period: Rolling window size (default 20 trading days).
 
     Returns:
-        변동성 시계열
+        Rolling standard deviation series scaled to the same price units.
+        The first ``period - 1`` entries are ``NaN``.
     """
-    # TODO: 변동성 계산 구현
-    pass
+    return prices.rolling(window=period).std()

@@ -1,0 +1,90 @@
+name: CI — Lint & Test
+
+# Trigger on every push to main and on all pull requests targeting main.
+# This ensures the main branch is always green and PRs are validated before merge.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    name: Python ${{ matrix.python-version }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.11"]
+
+    steps:
+      # ----------------------------------------------------------------
+      # 1. Check out source code
+      # ----------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ----------------------------------------------------------------
+      # 2. Set up the requested Python version
+      # ----------------------------------------------------------------
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # ----------------------------------------------------------------
+      # 3. Cache pip dependencies for faster subsequent runs
+      # ----------------------------------------------------------------
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # ----------------------------------------------------------------
+      # 4. Install runtime + development dependencies
+      # ----------------------------------------------------------------
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      # ----------------------------------------------------------------
+      # 5. Lint — flake8
+      #    E501 (line too long) is governed by setup.cfg (max-line-length=100).
+      #    The venv/ directory is excluded automatically via setup.cfg.
+      # ----------------------------------------------------------------
+      - name: Lint with flake8
+        run: |
+          flake8 . \
+            --count \
+            --statistics \
+            --format="::error file=%(path)s,line=%(row)d,col=%(col)d::%(text)s"
+
+      # ----------------------------------------------------------------
+      # 6. Test — pytest with coverage
+      #    Tests do NOT require .env or live API credentials; all external
+      #    dependencies are mocked in conftest.py.
+      # ----------------------------------------------------------------
+      - name: Test with pytest
+        run: |
+          pytest tests/ \
+            --cov=strategy \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            -v
+
+      # ----------------------------------------------------------------
+      # 7. Upload coverage report as an artifact (optional, for review)
+      # ----------------------------------------------------------------
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ matrix.python-version }}
+          path: coverage.xml
+          retention-days: 7

@@ -1,7 +1,18 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cd \"D:\\\\src\\\\AI\\\\kimbeggar-main\" && venv/Scripts/python scripts/test_kis.py 2>&1)"
+      "Bash(cd \"D:\\\\src\\\\AI\\\\kimbeggar-main\" && venv/Scripts/python scripts/test_kis.py 2>&1)",
+      "Bash(cd \"D:\\\\src\\\\AI\\\\kimbeggar-main\" && venv/Scripts/pip install pandas-ta --quiet 2>&1 | tail -3)",
+      "Bash(cd \"D:\\\\src\\\\AI\\\\kimbeggar-main\" && venv/Scripts/python -c \"import pandas_ta; print\\('pandas-ta OK:', pandas_ta.version\\)\")",
+      "Bash(cd \"D:\\\\src\\\\AI\\\\kimbeggar-main\" && venv/Scripts/pip install pandas-ta 2>&1 | tail -5)",
+      "Bash(cd \"D:\\\\src\\\\AI\\\\kimbeggar-main\" && venv/Scripts/pip install ta 2>&1 | tail -3 && venv/Scripts/python -c \"import ta; print\\('ta OK:', ta.__version__\\)\")",
+      "Bash(cd \"D:\\\\src\\\\AI\\\\kimbeggar-main\" && venv/Scripts/python -c \"import ta; print\\(dir\\(ta\\)\\)\")",
+      "Bash(cd \"D:\\\\src\\\\AI\\\\kimbeggar-main\" && venv/Scripts/python -c \"from ta.momentum import RSIIndicator; from ta.trend import SMAIndicator, EMAIndicator; print\\('momentum/trend OK'\\)\")",
+      "Bash(cd \"D:\\\\src\\\\AI\\\\kimbeggar-main\" && venv/Scripts/python -c \"import pandas_ta; print\\('OK'\\)\" 2>&1)",
+      "Bash(cd \"D:\\\\src\\\\AI\\\\kimbeggar-main\" && venv/Scripts/python -c \"\nfrom strategy.indicators import calculate_rsi, calculate_moving_average, detect_golden_cross, detect_dead_cross, calculate_volatility\nfrom strategy.hedge_logic import calculate_hedge_ratio, describe_hedge\nfrom strategy.signal import SignalEngine, SignalType, Signal\nfrom main import run_cycle\nprint\\('All imports OK'\\)\n\" 2>&1)",
+      "Bash(cd \"D:\\\\src\\\\AI\\\\kimbeggar-main\" && venv/Scripts/python -c \"\nimport pandas as pd\nfrom strategy.indicators import calculate_rsi, calculate_moving_average, detect_golden_cross, detect_dead_cross\nfrom strategy.hedge_logic import calculate_hedge_ratio, describe_hedge\nfrom strategy.signal import SignalEngine, SignalType\nfrom config.settings import Settings\n\nprices = pd.Series\\([float\\(x\\) for x in range\\(50, 80\\)] + [float\\(x\\) for x in range\\(79, 49, -1\\)]\\)\nrsi   = calculate_rsi\\(prices, 14\\)\nsma5  = calculate_moving_average\\(prices, 5\\)\nsma20 = calculate_moving_average\\(prices, 20\\)\ngc    = detect_golden_cross\\(sma5, sma20\\)\ndc    = detect_dead_cross\\(sma5, sma20\\)\n\nprint\\('RSI[-1]={:.2f}  SMA5[-1]={:.1f}  SMA20[-1]={:.1f}'.format\\(rsi.iloc[-1], sma5.iloc[-1], sma20.iloc[-1]\\)\\)\nprint\\('GoldenCross any={}  DeadCross any={}'.format\\(gc.any\\(\\), dc.any\\(\\)\\)\\)\n\nr1 = calculate_hedge_ratio\\(58000, 60000, 0.30, -2.0\\)\nr2 = calculate_hedge_ratio\\(62000, 60000, 0.30,  0.5\\)\nprint\\('hedge\\(58k, ma=60k, idx=-2%\\): {:.4f}'.format\\(r1\\)\\)\nprint\\('hedge\\(62k, ma=60k, idx=+0.5%\\): {:.4f}'.format\\(r2\\)\\)\n\nsettings = Settings\\(\\)\nengine   = SignalEngine\\(settings\\)\nohlcv    = [{'stck_clpr': str\\(int\\(p\\)\\)} for p in prices.tolist\\(\\)]\n\nsig    = engine.evaluate\\('005930', ohlcv\\)\nsig_sl = engine.evaluate\\('005930', ohlcv, entry_price=85.0\\)\nprint\\('Signal: {}  RSI={:.1f}'.format\\(sig.signal_type.value, sig.rsi\\)\\)\nprint\\('StopLoss check: {}'.format\\(sig_sl.signal_type.value\\)\\)\n\nidx_mock_down = {'bstp_nmix_prdy_ctrt': '-1.8'}\nidx_mock_up   = {'bstp_nmix_prdy_ctrt': '-0.5'}\nprint\\('HedgeTrigger\\(-1.8%\\): {}'.format\\(engine.check_hedge_signal\\(idx_mock_down\\)\\)\\)\nprint\\('HedgeTrigger\\(-0.5%\\): {}'.format\\(engine.check_hedge_signal\\(idx_mock_up\\)\\)\\)\nprint\\('ALL TESTS PASSED'\\)\n\" 2>&1)",
+      "Bash(cd \"D:\\\\src\\\\AI\\\\kimbeggar-main\" && venv/Scripts/pip install pytest pytest-cov --quiet && venv/Scripts/pytest tests/ -v 2>&1)",
+      "Bash(cd \"D:\\\\src\\\\AI\\\\kimbeggar-main\" && venv/Scripts/pytest tests/ -v 2>&1)"
     ]
   }
 }
