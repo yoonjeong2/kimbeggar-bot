@@ -153,6 +153,219 @@
 
 ---
 
+---
+
+## 8. 모듈별 구현 상태 (Module Status)
+
+> 범례: ✅ 완료 | 🔄 진행 중 | 🔲 TODO
+
+### `config/`
+
+| 파일 | 기능 | 상태 | 비고 |
+|---|---|---|---|
+| `config/settings.py` | `.env` 로드, 전역 설정 dataclass | ✅ 완료 | `dev_mode` 프로퍼티 포함 |
+| `config/ssl.py` | 환경별 SSL 검증 플래그 | ✅ 완료 | `DEV_MODE` 기반 조건부 우회 |
+
+### `data_agent/`
+
+| 파일 | 기능 | 상태 | 비고 |
+|---|---|---|---|
+| `data_agent/kis_api.py` | OAuth 토큰 발급/갱신 | ✅ 완료 | 24시간 유효, 만료 5분 전 자동 재발급 |
+| | 현재가 조회 (`inquire-price`) | ✅ 완료 | `tr_id=FHKST01010100` |
+| | 5분봉 OHLCV | ✅ 완료 | `tr_id=FHKST03010200` |
+| | 일봉 OHLCV | ✅ 완료 | `tr_id=FHKST03010100`, 기본 60일 |
+| | 지수 조회 (KOSPI/KOSDAQ) | ✅ 완료 | `tr_id=FHPUP03500100` |
+| | 웹소켓 실시간 시세 | 🔲 TODO | Phase 5 백로그 |
+
+### `strategy/`
+
+| 파일 | 기능 | 상태 | 비고 |
+|---|---|---|---|
+| `strategy/indicators.py` | RSI (Wilder 스무딩) | ✅ 완료 | `ta.momentum.RSIIndicator` 활용 |
+| | SMA (단순 이동평균) | ✅ 완료 | `ta.trend.SMAIndicator` 활용 |
+| | EMA (지수 이동평균) | ✅ 완료 | `ta.trend.EMAIndicator` 활용 |
+| | 골든크로스 감지 | ✅ 완료 | shift(1) 비교, bar 단위 정확 감지 |
+| | 데드크로스 감지 | ✅ 완료 | shift(1) 비교, bar 단위 정확 감지 |
+| | 변동성 (rolling std) | ✅ 완료 | |
+| | 변동성 기반 포지션 사이징 | 🔲 TODO | Kelly criterion 검토 예정 |
+| `strategy/hedge_logic.py` | 동적 헤지 비율 계산 | ✅ 완료 | MA이탈률×5pp + 지수낙폭×3pp, 0~80% 클램프 |
+| | 헤지 강도 설명 문자열 | ✅ 완료 | 강/중/약/불필요 4단계 |
+| `strategy/signal.py` | BUY 시그널 | ✅ 완료 | RSI ≤ 30 AND 골든크로스 |
+| | SELL 시그널 | ✅ 완료 | RSI ≥ 70 AND 데드크로스 |
+| | STOP_LOSS 시그널 | ✅ 완료 | 현재가 ≤ 진입가×(1−rate), 최우선 |
+| | HEDGE 시그널 | ✅ 완료 | 지수 등락률 ≤ −1.5% |
+| | 백테스트 모드 | 🔲 TODO | 과거 OHLCV 시뮬레이션 |
+
+### `notifier/`
+
+| 파일 | 기능 | 상태 | 비고 |
+|---|---|---|---|
+| `notifier/base.py` | `BaseNotifier` ABC | ✅ 완료 | DIP 기반 채널 인터페이스 |
+| | `NotifierService` 컴포짓 | ✅ 완료 | Observer 패턴, 런타임 채널 등록 |
+| `notifier/kakao.py` | 카카오 메시지 전송 | ✅ 완료 | tenacity 3회 재시도 포함 |
+| | 시그널 메시지 포맷팅 | ✅ 완료 | BUY/SELL/STOP_LOSS/HEDGE 레이블 |
+| `notifier/kakao_token_manager.py` | 토큰 파일 저장 (원자적) | ✅ 완료 | tempfile → os.replace() |
+| | access_token 자동 갱신 | ✅ 완료 | 만료 5분 전 자동 refresh |
+| | refresh_token 만료 감지 | ✅ 완료 | 30일 이내 재인증 경고 |
+| `notifier/telegram.py` | 텔레그램 채널 | 🔲 TODO | `BaseNotifier` 구현만으로 추가 가능 |
+
+### `main.py` / `logger/` / `scripts/`
+
+| 파일 | 기능 | 상태 | 비고 |
+|---|---|---|---|
+| `main.py` | 메인 루프 (`run_cycle`) | ✅ 완료 | schedule 기반 N분 주기 |
+| | 지수 헤지 체크 (선행) | ✅ 완료 | KOSPI 먼저 확인 후 종목별 평가 |
+| | 진입가 인메모리 추적 | ✅ 완료 | BUY→기록, SELL/STOP_LOSS→해제 |
+| | 장 시간 필터 | 🔲 TODO | 09:00~15:20 외 사이클 스킵 |
+| | 진입가 영속성 | 🔲 TODO | 재시작 시 초기화 문제 |
+| `logger/log_setup.py` | 일자별 로테이팅 파일 로거 | ✅ 완료 | 자정 교체, 30일 보관 |
+| `scripts/kakao_auth_setup.py` | 카카오 최초 OAuth 인증 | ✅ 완료 | 1회 실행용 |
+| `scripts/test_kis.py` | KIS API 연결 테스트 | ✅ 완료 | 토큰 발급 + 삼성전자 현재가 |
+| `scripts/test_kakao.py` | 카카오 메시지 전송 테스트 | ✅ 완료 | "김거지 봇 테스트 성공!" |
+
+---
+
+## 9. AI 도구 활용 기록 (AI-Assisted Development Log)
+
+> 이 프로젝트의 전체 코드는 **Claude Sonnet 4.6** (Anthropic)을 통해 설계 및 구현되었습니다.
+> 각 항목은 `날짜: 작업 내용 — 사용 도구 — 결과` 형식으로 기록합니다.
+
+---
+
+### `config/`
+
+| 날짜 | 파일 | 작업 | AI 도구 | 결과 |
+|---|---|---|---|---|
+| 2026-03-13 | `config/settings.py` | Settings dataclass 설계, `dev_mode` 프로퍼티 추가, Google Docstring 전면 적용 | Claude Sonnet 4.6 | 완료, 테스트 통과 |
+| 2026-03-13 | `config/ssl.py` | `ssl_verify()` 함수 신규 생성 — DEV_MODE 기반 환경별 SSL 우회 로직, 영문 주석 | Claude Sonnet 4.6 | 완료, 전 모듈 공유 |
+
+---
+
+### `data_agent/kis_api.py`
+
+| 날짜 | 작업 | AI 도구 | 결과 |
+|---|---|---|---|
+| 2026-03-13 | `_issue_token()` — KIS OAuth `client_credentials` 토큰 발급 구현 (TODO → 실제 코드) | Claude Sonnet 4.6 | 완료, 모의투자 서버 86400초 토큰 발급 성공 |
+| 2026-03-13 | `get_current_price()` 신규 추가, `get_ohlcv_5min()` / `get_ohlcv_daily()` / `get_index_data()` TODO 구현 | Claude Sonnet 4.6 | 완료, 삼성전자 184,200원 조회 확인 |
+| 2026-03-13 | `_request()` 공통 핸들러 구현 — KIS 인증 헤더 자동 주입, `rt_cd` 오류 감지 | Claude Sonnet 4.6 | 완료 |
+| 2026-03-13 | `_get_with_retry()` / `_post_with_retry()` — tenacity 재시도 데코레이터 적용, 지수 백오프 1→2→4s | Claude Sonnet 4.6 | 완료 |
+| 2026-03-13 | PEP 484 타입 힌팅 전면 적용, Google Docstring 추가 | Claude Sonnet 4.6 | 완료 |
+
+---
+
+### `strategy/indicators.py`
+
+| 날짜 | 작업 | AI 도구 | 결과 |
+|---|---|---|---|
+| 2026-03-13 | `calculate_rsi()` — `ta.momentum.RSIIndicator` 활용, Wilder 스무딩 방식으로 구현 (TODO 제거) | Claude Sonnet 4.6 | 완료, `RSI[-1]=9.77` 단조 하락 시리즈 검증 통과 |
+| 2026-03-13 | `calculate_moving_average()` — `ta.trend.SMAIndicator` 활용 (TODO 제거) | Claude Sonnet 4.6 | 완료, SMA 산술평균 단위 테스트 통과 |
+| 2026-03-13 | `calculate_ema()` — `ta.trend.EMAIndicator` 활용 (TODO 제거) | Claude Sonnet 4.6 | 완료, EMA가 SMA보다 spike에 빠르게 반응함 확인 |
+| 2026-03-13 | `detect_golden_cross()` / `detect_dead_cross()` — shift(1) 비교 방식, bar 단위 정확 감지 (TODO 제거) | Claude Sonnet 4.6 | 완료, V자/A자 합성 시리즈로 크로스 감지 검증 |
+| 2026-03-13 | `calculate_volatility()` — rolling std 구현 (TODO 제거) | Claude Sonnet 4.6 | 완료, 상수 시리즈 변동성=0 확인 |
+
+---
+
+### `strategy/hedge_logic.py`
+
+| 날짜 | 작업 | AI 도구 | 결과 |
+|---|---|---|---|
+| 2026-03-13 | `hedge_logic.py` 신규 파일 생성 — MA이탈률×5pp + 지수낙폭×3pp 헤지 비율 공식 설계 | Claude Sonnet 4.6 | 완료 |
+| 2026-03-13 | `calculate_hedge_ratio()` — 0~80% 클램프, 강세장에서 기본값 유지 검증 | Claude Sonnet 4.6 | 완료, 수식 단위 테스트 7개 통과 |
+| 2026-03-13 | `describe_hedge()` — 강/중/약/불필요 4단계 설명 문자열 | Claude Sonnet 4.6 | 완료 |
+
+---
+
+### `strategy/signal.py`
+
+| 날짜 | 작업 | AI 도구 | 결과 |
+|---|---|---|---|
+| 2026-03-13 | `SignalEngine.evaluate()` — OHLCV list → pd.Series 변환, 지표 계산, 우선순위 판별 (STOP_LOSS > SELL > BUY > HOLD) 구현 (TODO 제거) | Claude Sonnet 4.6 | 완료 |
+| 2026-03-13 | `check_buy_signal()` — RSI ≤ 30 AND 골든크로스 조건 구현 (TODO 제거) | Claude Sonnet 4.6 | 완료, 단일 조건만 충족 시 미발동 검증 |
+| 2026-03-13 | `check_sell_signal()` — RSI ≥ 70 AND 데드크로스 조건 구현 (TODO 제거) | Claude Sonnet 4.6 | 완료 |
+| 2026-03-13 | `check_stop_loss()` — `price ≤ entry × (1 − rate)` 구현 (TODO 제거) | Claude Sonnet 4.6 | 완료, 경계값(floor 정확히 일치) 테스트 통과 |
+| 2026-03-13 | `check_hedge_signal()` — `bstp_nmix_prdy_ctrt` 파싱, ≤ −1.5% 트리거 (TODO 제거) | Claude Sonnet 4.6 | 완료, 잘못된 문자열 입력 방어 처리 확인 |
+| 2026-03-13 | PEP 484 타입 힌팅 전면 적용, Google Docstring 추가, 시그널 우선순위 주석 | Claude Sonnet 4.6 | 완료 |
+
+---
+
+### `notifier/`
+
+| 날짜 | 파일 | 작업 | AI 도구 | 결과 |
+|---|---|---|---|---|
+| 2026-03-13 | `notifier/base.py` | `BaseNotifier` ABC + `NotifierService` 컴포짓 신규 설계 (Observer 패턴, DIP) | Claude Sonnet 4.6 | 완료, KakaoNotifier 연동 확인 |
+| 2026-03-13 | `notifier/kakao.py` | `KakaoNotifier(BaseNotifier)` 리팩토링 — `_post_with_retry()` tenacity 3회 재시도, Google Docstring | Claude Sonnet 4.6 | 완료, "김거지 봇 테스트 성공!" 실제 전송 확인 |
+| 2026-03-13 | `notifier/kakao_token_manager.py` | `_post_token_with_retry()` tenacity 적용, `import os` 중복 제거, Google Docstring 전면 작성 | Claude Sonnet 4.6 | 완료 |
+
+---
+
+### `main.py`
+
+| 날짜 | 작업 | AI 도구 | 결과 |
+|---|---|---|---|
+| 2026-03-13 | `run_cycle()` 스켈레톤(pass) → 실제 구현: KOSPI 선행 헤지 체크, 종목별 OHLCV+현재가 수집, 시그널 평가, 알림 전송, 진입가 추적 | Claude Sonnet 4.6 | 완료 |
+
+---
+
+### `tests/`
+
+| 날짜 | 파일 | 작업 | AI 도구 | 결과 |
+|---|---|---|---|---|
+| 2026-03-13 | `tests/conftest.py` | `mock_settings`, `ascending_prices`, `descending_prices`, `ohlcv_*` fixture 작성 | Claude Sonnet 4.6 | 완료 |
+| 2026-03-13 | `tests/test_strategy.py` | indicators 22개, hedge_logic 12개, signal 24개 총 58개 단위 테스트 작성 | Claude Sonnet 4.6 | 완료, **58 / 58 PASSED** (0.15s) |
+| 2026-03-13 | 테스트 버그 수정: RSI 워밍업 `[:14]` → `[:13]`, V/A자 크로스 시리즈, `pytest.approx` Series 비교 수정 | Claude Sonnet 4.6 | 완료 |
+
+---
+
+### CI/CD & 프로젝트 설정
+
+| 날짜 | 파일 | 작업 | AI 도구 | 결과 |
+|---|---|---|---|---|
+| 2026-03-13 | `.github/workflows/python-app.yml` | GitHub Actions CI/CD 파이프라인 구축 — flake8 린팅 + pytest --cov + coverage Artifact | Claude Sonnet 4.6 | 완료 |
+| 2026-03-13 | `setup.cfg` | flake8(max-line-length=100) + pytest testpaths 통합 설정 | Claude Sonnet 4.6 | 완료 |
+| 2026-03-13 | `requirements-dev.txt` | pytest, pytest-cov, flake8 개발 전용 의존성 분리 | Claude Sonnet 4.6 | 완료 |
+| 2026-03-13 | `.gitignore` | `.env`, `venv/`, `data/kakao_token.json`, `__pycache__/`, `logs/` 보안 설정 | Claude Sonnet 4.6 | 완료 |
+| 2026-03-13 | `README.md` | 프로젝트 목적, 아키텍처 다이어그램, 설치/실행/테스트 가이드, 확장 가이드 작성 | Claude Sonnet 4.6 | 완료 |
+
+---
+
+## 10. 변경 로그 (Changelog)
+
+### [2026-03-13] — 초기 개발 완료
+
+#### Added
+- `config/ssl.py` — 환경별 SSL 검증 공통 헬퍼
+- `notifier/base.py` — `BaseNotifier` ABC + `NotifierService` (Observer 패턴)
+- `strategy/hedge_logic.py` — 동적 헤지 비율 계산 모듈
+- `tests/conftest.py` — pytest 공용 fixture
+- `tests/test_strategy.py` — strategy 모듈 단위 테스트 58개
+- `.github/workflows/python-app.yml` — GitHub Actions CI/CD
+- `requirements-dev.txt` — 개발 전용 의존성
+- `setup.cfg` — flake8/pytest 통합 설정
+- `.gitignore` — 보안 파일 제외 설정
+- `README.md` — 프로젝트 문서
+
+#### Changed
+- `strategy/indicators.py` — 모든 TODO 제거, `ta` 라이브러리로 완전 구현
+- `strategy/signal.py` — `SignalEngine` 전체 메서드 구현 (스켈레톤 → 실제 로직)
+- `main.py` — `run_cycle()` 완전 구현
+- `data_agent/kis_api.py` — 모든 TODO 구현 + tenacity 재시도 + PEP 484 타입힌팅
+- `notifier/kakao.py` — `BaseNotifier` 상속, tenacity 적용, Google Docstring
+- `notifier/kakao_token_manager.py` — tenacity 적용, 중복 import 정리, Google Docstring
+- `config/settings.py` — `dev_mode` 프로퍼티 추가, Google Docstring
+- `requirements.txt` — `tenacity>=8.2.0`, `ta>=0.10.0` 추가
+
+#### Fixed
+- `notifier/kakao_token_manager.py` — `import os` 중복 선언 제거
+- `strategy/kakao_auth_setup.py` — `verify=False` 하드코딩 → `ssl_verify()` 조건부 처리
+- 테스트: RSI 워밍업 오프셋 수정 (`[:14]` → `[:13]`), V/A자 크로스 시리즈로 교체
+
+#### Security
+- 모든 `requests` 호출의 `verify=False` 하드코딩 제거
+- `config/ssl.py`로 SSL 검증 중앙화 — `DEV_MODE=false` 한 줄로 운영 TLS 복원
+- `.gitignore`에 `.env`, `kakao_token.json`, `venv/`, `logs/` 추가
+
+---
+
 ### 🔲 Phase 5 — 향후 과제 (Backlog)
 
 | 항목 | 우선순위 | 비고 |
