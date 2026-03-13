@@ -4,5 +4,12 @@ pandas>=2.0.0
 numpy>=1.24.0
 schedule>=1.2.0
 tenacity>=8.2.0
-# Indicators are implemented with pure pandas/numpy — no TA library needed.
-# pandas-ta>=0.3.14b  # optional; pip install pandas-ta
+backtrader>=1.9.78.123  # backtesting framework
+
+# TA-Lib: high-performance C-based indicator library (optional).
+# Installation varies by environment:
+#   pip    : pip install TA-Lib  (requires pre-built C library on the system)
+#   conda  : conda install -c conda-forge ta-lib   ← recommended on Windows/macOS
+# If installed, indicators can be replaced with talib.RSI(), talib.SMA(), etc.
+# for faster computation on large OHLCV datasets.
+# TA-Lib>=0.4.28
