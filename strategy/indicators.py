@@ -1,8 +1,8 @@
 """Technical indicator calculation module.
 
-All indicators are computed with the ``ta`` library (pandas-compatible).
-Each function accepts and returns a ``pd.Series`` so results can be composed
-and passed directly into signal-detection logic.
+All indicators are computed with pure ``pandas`` / ``numpy`` — no third-party
+TA library required.  Each function accepts and returns a ``pd.Series`` so
+results can be composed and passed directly into signal-detection logic.
 
 Indicator reference
 -------------------
@@ -17,22 +17,48 @@ Indicator reference
 from __future__ import annotations
 
 import pandas as pd
-from ta.momentum import RSIIndicator
-from ta.trend import EMAIndicator, SMAIndicator
 
 
 def calculate_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
-    """Compute RSI using Wilder's smoothing method via the ``ta`` library.
+    """Compute RSI using Wilder's smoothing (EMA with alpha = 1 / period).
+
+    Formula::
+
+        delta    = prices.diff()
+        gain     = max(delta, 0)
+        loss     = max(-delta, 0)
+        avg_gain = EWM(alpha=1/period) of gain
+        avg_loss = EWM(alpha=1/period) of loss
+        RS       = avg_gain / avg_loss
+        RSI      = 100 - (100 / (1 + RS))
+
+    The first ``period - 1`` entries are ``NaN`` (Wilder warm-up).
 
     Args:
         prices: Close-price time series (chronological order, oldest first).
         period: Look-back window (default 14).
 
     Returns:
-        RSI values in the range [0, 100].  The first ``period`` entries will
-        be ``NaN``.
+        RSI values in the range [0, 100].  The first ``period - 1`` entries
+        are ``NaN``.
     """
-    return RSIIndicator(close=prices, window=period).rsi()
+    delta = prices.diff()
+
+    # Separate price moves into gains and losses
+    gain = delta.clip(lower=0)   # negative deltas → 0
+    loss = -delta.clip(upper=0)  # positive deltas → 0
+
+    # Wilder's smoothing = EMA with alpha = 1/period.
+    # min_periods=period-1 ensures the first (period-1) values stay NaN,
+    # matching the conventional RSI warm-up convention.
+    alpha = 1.0 / period
+    avg_gain = gain.ewm(alpha=alpha, min_periods=period - 1, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=alpha, min_periods=period - 1, adjust=False).mean()
+
+    # RS = inf when avg_loss == 0 (all gains) → RSI = 100
+    # RS = 0   when avg_gain == 0 (all losses) → RSI = 0
+    rs = avg_gain / avg_loss
+    return 100.0 - (100.0 / (1.0 + rs))
 
 
 def calculate_moving_average(prices: pd.Series, period: int) -> pd.Series:
@@ -45,20 +71,22 @@ def calculate_moving_average(prices: pd.Series, period: int) -> pd.Series:
     Returns:
         SMA series; the first ``period - 1`` entries are ``NaN``.
     """
-    return SMAIndicator(close=prices, window=period).sma_indicator()
+    return prices.rolling(window=period).mean()
 
 
 def calculate_ema(prices: pd.Series, period: int) -> pd.Series:
     """Compute an Exponential Moving Average (EMA).
+
+    Uses ``span = period`` which gives ``alpha = 2 / (period + 1)``.
 
     Args:
         prices: Close-price time series.
         period: Span for the exponential decay factor.
 
     Returns:
-        EMA series; the first ``period - 1`` entries are ``NaN``.
+        EMA series.
     """
-    return EMAIndicator(close=prices, window=period).ema_indicator()
+    return prices.ewm(span=period, adjust=False).mean()
 
 
 def detect_golden_cross(short_ma: pd.Series, long_ma: pd.Series) -> pd.Series:
@@ -98,14 +126,14 @@ def detect_dead_cross(short_ma: pd.Series, long_ma: pd.Series) -> pd.Series:
 
 
 def calculate_volatility(prices: pd.Series, period: int = 20) -> pd.Series:
-    """Compute annualised rolling volatility (standard-deviation based).
+    """Compute rolling volatility (standard-deviation based).
 
     Args:
         prices: Close-price time series.
         period: Rolling window size (default 20 trading days).
 
     Returns:
-        Rolling standard deviation series scaled to the same price units.
-        The first ``period - 1`` entries are ``NaN``.
+        Rolling standard deviation series.  The first ``period - 1`` entries
+        are ``NaN``.
     """
     return prices.rolling(window=period).std()

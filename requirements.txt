@@ -4,5 +4,5 @@ pandas>=2.0.0
 numpy>=1.24.0
 schedule>=1.2.0
 tenacity>=8.2.0
-# pandas-ta>=0.3.14b  # optional richer TA library; pip install pandas-ta
-ta>=0.10.0           # technical analysis indicators (RSI, SMA, EMA)
+# Indicators are implemented with pure pandas/numpy — no TA library needed.
+# pandas-ta>=0.3.14b  # optional; pip install pandas-ta

@@ -140,8 +140,11 @@ class KISClient:
                 - ``stck_sdpr``: previous close (str)
                 - ``prdy_ctrt``: day-over-day change rate (str, %)
                 - ``acml_vol``:  accumulated volume (str)
+
+        Raises:
+            KeyError: If the response does not contain the ``output`` field.
         """
-        return self._request(
+        data = self._request(
             method="GET",
             path=_PRICE_PATH,
             tr_id="FHKST01010100",
@@ -149,7 +152,12 @@ class KISClient:
                 "FID_COND_MRKT_DIV_CODE": "J",
                 "FID_INPUT_ISCD": symbol,
             },
-        )["output"]
+        )
+        if "output" not in data:
+            raise KeyError(
+                f"KIS response for symbol {symbol!r} is missing 'output' key: {data}"
+            )
+        return data["output"]
 
     def get_ohlcv_5min(self, symbol: str) -> List[Dict[str, Any]]:
         """Retrieve intraday 5-minute OHLCV candles for a domestic stock.
@@ -165,7 +173,7 @@ class KISClient:
             ``stck_prpr``, and ``cntg_vol``.
         """
         now_str = datetime.now().strftime("%H%M%S")
-        return self._request(
+        data = self._request(
             method="GET",
             path=_CHART_5MIN_PATH,
             tr_id="FHKST03010200",
@@ -176,7 +184,12 @@ class KISClient:
                 "FID_INPUT_HOUR_1": now_str,
                 "FID_PW_DATA_INCU_YN": "N",
             },
-        )["output2"]
+        )
+        if "output2" not in data:
+            raise KeyError(
+                f"KIS 5-min OHLCV response for {symbol!r} is missing 'output2' key: {data}"
+            )
+        return data["output2"]
 
     def get_ohlcv_daily(
         self, symbol: str, period: int = 60
@@ -194,7 +207,7 @@ class KISClient:
         """
         end_date = datetime.now().strftime("%Y%m%d")
         start_date = (datetime.now() - timedelta(days=period)).strftime("%Y%m%d")
-        return self._request(
+        data = self._request(
             method="GET",
             path=_CHART_DAILY_PATH,
             tr_id="FHKST03010100",
@@ -206,7 +219,12 @@ class KISClient:
                 "FID_PERIOD_DIV_CODE": "D",
                 "FID_ORG_ADJ_PRC": "1",
             },
-        )["output2"]
+        )
+        if "output2" not in data:
+            raise KeyError(
+                f"KIS daily OHLCV response for {symbol!r} is missing 'output2' key: {data}"
+            )
+        return data["output2"]
 
     def get_index_data(self, index_code: str) -> Dict[str, Any]:
         """Retrieve current price data for a domestic market index.
@@ -220,7 +238,7 @@ class KISClient:
             ``bstp_nmix_prdy_ctrt`` (day-over-day change rate), and related
             fields.
         """
-        return self._request(
+        data = self._request(
             method="GET",
             path=_INDEX_PATH,
             tr_id="FHPUP03500100",
@@ -228,7 +246,12 @@ class KISClient:
                 "FID_COND_MRKT_DIV_CODE": "U",
                 "FID_INPUT_ISCD": index_code,
             },
-        )["output"]
+        )
+        if "output" not in data:
+            raise KeyError(
+                f"KIS index response for code {index_code!r} is missing 'output' key: {data}"
+            )
+        return data["output"]
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -278,8 +301,24 @@ class KISClient:
 
         rt_cd = data.get("rt_cd")
         if rt_cd is not None and rt_cd != "0":
+            msg_cd = data.get("msg_cd", "")
+            msg1 = data.get("msg1", "")
+            self._logger.error(
+                "KIS API error on %s | rt_cd=%s | msg_cd=%s | msg=%s",
+                path, rt_cd, msg_cd, msg1,
+            )
+            # EGW00123: access token invalid or expired — force re-issue on
+            # the next call by clearing the cached token.
+            if msg_cd in ("EGW00123",):
+                self._logger.warning(
+                    "KIS token appears invalid (msg_cd=%s); clearing cached token.",
+                    msg_cd,
+                )
+                self._access_token = None
+                self._token_expires_at = None
             raise RuntimeError(
-                f"KIS API error on {path} (rt_cd={rt_cd}): {data.get('msg1')}"
+                f"KIS API error on {path} "
+                f"(rt_cd={rt_cd}, msg_cd={msg_cd}): {msg1}"
             )
         return data
 
