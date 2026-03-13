@@ -79,6 +79,7 @@ def run_cycle(
             logger.warning("HEDGE alert sent: KOSPI %+.2f%%", index_change_rate)
     except Exception as exc:
         logger.error("Index data fetch failed: %s", exc)
+        notifier.send_error(f"지수 데이터 조회 실패: {exc}")
 
     # ------------------------------------------------------------------
     # Step 2 — Per-symbol signal evaluation
@@ -139,6 +140,7 @@ def run_cycle(
 
         except Exception as exc:
             logger.error("Error processing symbol %s: %s", symbol, exc)
+            notifier.send_error(f"[{symbol}] 처리 중 오류 발생: {exc}")
 
     logger.info("=== Monitoring cycle complete ===")
 

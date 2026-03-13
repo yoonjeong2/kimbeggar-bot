@@ -5,6 +5,8 @@ numpy>=1.24.0
 schedule>=1.2.0
 tenacity>=8.2.0
 backtrader>=1.9.78.123  # backtesting framework
+pytest>=7.4.0           # test runner (also in requirements-dev.txt)
+pytest-cov>=4.1.0       # coverage reporting
 
 # TA-Lib: high-performance C-based indicator library (optional).
 # Installation varies by environment:
