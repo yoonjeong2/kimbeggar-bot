@@ -5,6 +5,8 @@ numpy>=1.24.0
 schedule>=1.2.0
 tenacity>=8.2.0
 backtrader>=1.9.78.123  # backtesting framework
+fastapi>=0.110.0        # lightweight web dashboard
+uvicorn[standard]>=0.29.0  # ASGI server for FastAPI
 pytest>=7.4.0           # test runner (also in requirements-dev.txt)
 pytest-cov>=4.1.0       # coverage reporting
 

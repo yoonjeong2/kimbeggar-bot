@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -33,6 +34,19 @@ from strategy.indicators import (
 
 # Day-over-day index change rate (%) that triggers a HEDGE signal
 _HEDGE_TRIGGER_RATE: float = -1.5
+
+
+def is_market_open(now: Optional[datetime] = None) -> bool:
+    """한국장 거래 시간(평일 09:00~15:30) 여부를 반환한다."""
+    if now is None:
+        now = datetime.now()
+    # 주말 체크 (5=토, 6=일)
+    if now.weekday() >= 5:
+        return False
+    # 시간 체크
+    market_open = now.replace(hour=9, minute=0, second=0, microsecond=0)
+    market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    return market_open <= now <= market_close
 
 
 class SignalType(Enum):

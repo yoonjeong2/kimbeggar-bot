@@ -33,7 +33,7 @@ from strategy.hedge_logic import (
     calculate_hedge_ratio,
     describe_hedge,
 )
-from strategy.signal import SignalEngine, SignalType
+from strategy.signal import SignalEngine, SignalType, is_market_open
 
 # ===========================================================================
 # strategy.indicators
@@ -495,3 +495,46 @@ class TestSignalEngineEvaluate:
         # ascending_prices ends at 109; entry=110 → floor=104.5; price 109 > 104.5
         signal = engine.evaluate("TEST", ohlcv_ascending, entry_price=110.0)
         assert signal.signal_type != SignalType.STOP_LOSS
+
+
+# ===========================================================================
+# strategy.signal — is_market_open
+# ===========================================================================
+
+
+class TestIsMarketOpen:
+    """Tests for ``is_market_open``."""
+
+    def _dt(self, weekday: int, hour: int, minute: int):
+        """Build a datetime for a specific weekday/time.
+
+        weekday: 0=Mon, 1=Tue, … 5=Sat, 6=Sun
+        Picks the closest matching date starting from 2024-01-01 (Monday).
+        """
+        from datetime import datetime
+
+        base = datetime(2024, 1, 1)  # Monday
+        delta = (weekday - base.weekday()) % 7
+        d = base.replace(day=base.day + delta, hour=hour, minute=minute, second=0, microsecond=0)
+        return d
+
+    def test_weekday_at_open_is_true(self):
+        assert is_market_open(self._dt(0, 9, 0)) is True
+
+    def test_weekday_midday_is_true(self):
+        assert is_market_open(self._dt(0, 12, 0)) is True
+
+    def test_weekday_at_close_is_true(self):
+        assert is_market_open(self._dt(0, 15, 30)) is True
+
+    def test_weekday_one_minute_after_close_is_false(self):
+        assert is_market_open(self._dt(0, 15, 31)) is False
+
+    def test_weekday_before_open_is_false(self):
+        assert is_market_open(self._dt(0, 8, 59)) is False
+
+    def test_saturday_is_false(self):
+        assert is_market_open(self._dt(5, 12, 0)) is False
+
+    def test_sunday_is_false(self):
+        assert is_market_open(self._dt(6, 12, 0)) is False

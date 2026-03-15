@@ -1,13 +1,12 @@
 """Unit tests for main.run_cycle.
 
-All external dependencies (KIS API, SignalEngine, NotifierService) are mocked
-so tests are fully deterministic and never hit live APIs.
+All external dependencies (KIS API, SignalEngine, NotifierService, PositionStore)
+are mocked so tests are fully deterministic and never hit live APIs or the filesystem.
 """
 
 from __future__ import annotations
 
-from typing import Dict, Optional
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -50,12 +49,24 @@ def _make_signal(
     )
 
 
+def _make_position_store(entries: dict | None = None) -> MagicMock:
+    """Return a MagicMock that behaves like a PositionStore."""
+    store = MagicMock()
+    data: dict = dict(entries or {})
+    store.get.side_effect = lambda sym: data.get(sym)
+    store.set.side_effect = lambda sym, price: data.__setitem__(sym, price)
+    store.delete.side_effect = lambda sym: data.pop(sym, None)
+    store._data = data  # expose internal dict for assertions
+    return store
+
+
 def _run(
     signal: Signal,
-    entry_prices: Optional[Dict] = None,
+    position_store: MagicMock | None = None,
     index_change: str = "0.5",
     hedge_triggered: bool = False,
-) -> Dict:
+    market_open: bool = True,
+) -> dict:
     settings = _make_settings()
     kis = MagicMock()
     kis.get_index_data.return_value = {"bstp_nmix_prdy_ctrt": index_change}
@@ -67,14 +78,31 @@ def _run(
     engine.evaluate.return_value = signal
 
     notifier = MagicMock()
-    ep = entry_prices if entry_prices is not None else {}
+    ps = position_store if position_store is not None else _make_position_store()
 
-    run_cycle(settings, kis, engine, notifier, ep)
-    return {"engine": engine, "notifier": notifier, "entry_prices": ep}
+    with patch("main.is_market_open", return_value=market_open):
+        run_cycle(settings, kis, engine, notifier, ps)
+
+    return {"engine": engine, "notifier": notifier, "position_store": ps}
 
 
 # ---------------------------------------------------------------------------
-# Tests
+# Market hours filter
+# ---------------------------------------------------------------------------
+
+
+class TestMarketHoursFilter:
+    def test_skips_cycle_when_market_closed(self):
+        ctx = _run(_make_signal(), market_open=False)
+        ctx["engine"].evaluate.assert_not_called()
+
+    def test_runs_cycle_when_market_open(self):
+        ctx = _run(_make_signal(), market_open=True)
+        ctx["engine"].evaluate.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# HOLD signal
 # ---------------------------------------------------------------------------
 
 
@@ -84,8 +112,14 @@ class TestRunCycleHold:
         ctx["notifier"].send_signal.assert_not_called()
 
     def test_hold_does_not_record_entry_price(self):
-        ctx = _run(_make_signal(signal_type=SignalType.HOLD))
-        assert ctx["entry_prices"] == {}
+        ps = _make_position_store()
+        _run(_make_signal(signal_type=SignalType.HOLD), position_store=ps)
+        ps.set.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# BUY signal
+# ---------------------------------------------------------------------------
 
 
 class TestRunCycleBuy:
@@ -94,19 +128,26 @@ class TestRunCycleBuy:
         ctx["notifier"].send_signal.assert_called_once()
 
     def test_buy_records_entry_price(self):
-        ctx = _run(
-            _make_signal(symbol="005930", signal_type=SignalType.BUY, price=71_500.0)
+        ps = _make_position_store()
+        _run(
+            _make_signal(symbol="005930", signal_type=SignalType.BUY, price=71_500.0),
+            position_store=ps,
         )
-        assert ctx["entry_prices"].get("005930") == pytest.approx(71_500.0)
+        ps.set.assert_called_once_with("005930", pytest.approx(71_500.0))
 
     def test_buy_does_not_clear_existing_entry(self):
-        existing = {"000660": 50_000.0}
-        ctx = _run(
+        ps = _make_position_store({"000660": 50_000.0})
+        _run(
             _make_signal(symbol="005930", signal_type=SignalType.BUY, price=71_500.0),
-            entry_prices=existing,
+            position_store=ps,
         )
         # The other symbol's entry must survive
-        assert ctx["entry_prices"].get("000660") == pytest.approx(50_000.0)
+        assert ps._data.get("000660") == pytest.approx(50_000.0)
+
+
+# ---------------------------------------------------------------------------
+# SELL signal
+# ---------------------------------------------------------------------------
 
 
 class TestRunCycleSell:
@@ -115,11 +156,17 @@ class TestRunCycleSell:
         ctx["notifier"].send_signal.assert_called_once()
 
     def test_sell_clears_entry_price(self):
-        ctx = _run(
+        ps = _make_position_store({"005930": 70_000.0})
+        _run(
             _make_signal(symbol="005930", signal_type=SignalType.SELL),
-            entry_prices={"005930": 70_000.0},
+            position_store=ps,
         )
-        assert "005930" not in ctx["entry_prices"]
+        ps.delete.assert_called_once_with("005930")
+
+
+# ---------------------------------------------------------------------------
+# STOP_LOSS signal
+# ---------------------------------------------------------------------------
 
 
 class TestRunCycleStopLoss:
@@ -128,16 +175,21 @@ class TestRunCycleStopLoss:
         ctx["notifier"].send_signal.assert_called_once()
 
     def test_stop_loss_clears_entry_price(self):
-        ctx = _run(
+        ps = _make_position_store({"005930": 70_000.0})
+        _run(
             _make_signal(symbol="005930", signal_type=SignalType.STOP_LOSS),
-            entry_prices={"005930": 70_000.0},
+            position_store=ps,
         )
-        assert "005930" not in ctx["entry_prices"]
+        ps.delete.assert_called_once_with("005930")
 
     def test_stop_loss_sends_hedge_recommendation(self):
         ctx = _run(_make_signal(signal_type=SignalType.STOP_LOSS))
-        # send_message is called for the hedge recommendation
         ctx["notifier"].send_message.assert_called()
+
+
+# ---------------------------------------------------------------------------
+# HEDGE (index-level)
+# ---------------------------------------------------------------------------
 
 
 class TestRunCycleHedge:
@@ -149,13 +201,21 @@ class TestRunCycleHedge:
         kis.get_current_price.return_value = {"stck_prpr": "70000"}
 
         engine = MagicMock()
-        engine.check_hedge_signal.return_value = True  # trigger hedge
+        engine.check_hedge_signal.return_value = True
         engine.evaluate.return_value = _make_signal(signal_type=SignalType.HOLD)
 
         notifier = MagicMock()
-        run_cycle(settings, kis, engine, notifier, {})
+        ps = _make_position_store()
+
+        with patch("main.is_market_open", return_value=True):
+            run_cycle(settings, kis, engine, notifier, ps)
 
         notifier.send_message.assert_called()
+
+
+# ---------------------------------------------------------------------------
+# Error handling
+# ---------------------------------------------------------------------------
 
 
 class TestRunCycleErrorHandling:
@@ -171,8 +231,10 @@ class TestRunCycleErrorHandling:
         engine.evaluate.return_value = _make_signal()
 
         notifier = MagicMock()
-        # Should not raise
-        run_cycle(settings, kis, engine, notifier, {})
+        ps = _make_position_store()
+
+        with patch("main.is_market_open", return_value=True):
+            run_cycle(settings, kis, engine, notifier, ps)
 
     def test_symbol_api_error_does_not_crash(self):
         settings = _make_settings(watch_symbols=["005930"])
@@ -184,8 +246,10 @@ class TestRunCycleErrorHandling:
         engine.check_hedge_signal.return_value = False
 
         notifier = MagicMock()
-        # Should not raise; error is caught per-symbol
-        run_cycle(settings, kis, engine, notifier, {})
+        ps = _make_position_store()
+
+        with patch("main.is_market_open", return_value=True):
+            run_cycle(settings, kis, engine, notifier, ps)
 
     def test_empty_symbol_list_is_skipped_gracefully(self):
         settings = _make_settings(watch_symbols=["", "  "])
@@ -194,6 +258,9 @@ class TestRunCycleErrorHandling:
         engine = MagicMock()
         engine.check_hedge_signal.return_value = False
         notifier = MagicMock()
+        ps = _make_position_store()
 
-        run_cycle(settings, kis, engine, notifier, {})
+        with patch("main.is_market_open", return_value=True):
+            run_cycle(settings, kis, engine, notifier, ps)
+
         engine.evaluate.assert_not_called()

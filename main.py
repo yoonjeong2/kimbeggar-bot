@@ -5,26 +5,33 @@ Runs a scheduled monitoring loop that:
 2. For each watched symbol, fetches daily OHLCV and evaluates trading signals.
 3. Sends a Kakao Talk notification whenever a non-HOLD signal is detected.
 
-Entry prices are tracked in-memory (reset on restart).  For a persistent
-position tracker, replace the ``entry_prices`` dict with a database or
-JSON-file backed store.
+Entry prices are persisted in a SQLite database (``data/bot_state.db``) via
+:class:`~data_agent.position_store.PositionStore` so they survive bot restarts.
+
+The bot loop runs in a background daemon thread while the FastAPI web dashboard
+is served by uvicorn on the main thread (default: http://0.0.0.0:8000).
 """
 
 from __future__ import annotations
 
 import logging
+import threading
 import time
-from typing import Dict, Optional
+from collections import deque
+from typing import Any, Deque, Dict, Optional
 
 import schedule
+import uvicorn
 
+from api.app import create_app
 from config.settings import Settings
 from data_agent.kis_api import KISClient
+from data_agent.position_store import PositionStore
 from logger.log_setup import setup_logger
 from notifier import NotifierService
 from notifier.kakao import KakaoNotifier
 from strategy.hedge_logic import calculate_hedge_ratio, describe_hedge
-from strategy.signal import Signal, SignalEngine, SignalType
+from strategy.signal import Signal, SignalEngine, SignalType, is_market_open
 
 
 def run_cycle(
@@ -32,29 +39,39 @@ def run_cycle(
     kis: KISClient,
     engine: SignalEngine,
     notifier: NotifierService,
-    entry_prices: Dict[str, Optional[float]],
+    position_store: PositionStore,
+    signal_log: Optional[Deque[Dict[str, Any]]] = None,
 ) -> None:
     """Execute one full monitoring cycle across all watched symbols.
 
+    Skips execution outside Korean market hours (weekdays 09:00–15:30).
+
     Sequence
     --------
-    1. Fetch KOSPI index data → evaluate market-level HEDGE condition.
-    2. For each symbol in ``settings.watch_symbols``:
+    1. Check market hours — skip cycle if outside trading window.
+    2. Fetch KOSPI index data → evaluate market-level HEDGE condition.
+    3. For each symbol in ``settings.watch_symbols``:
        a. Fetch daily OHLCV (60-day window).
        b. Fetch real-time current price.
        c. Run :meth:`~strategy.signal.SignalEngine.evaluate`.
        d. Send notification for any non-HOLD signal.
-       e. Record entry price when a BUY signal fires.
+       e. Persist entry price to SQLite when a BUY signal fires.
+       f. Append signal metadata to ``signal_log`` for the web dashboard.
 
     Args:
-        settings:      Application ``Settings`` instance.
-        kis:           Authenticated :class:`~data_agent.kis_api.KISClient`.
-        engine:        :class:`~strategy.signal.SignalEngine` instance.
-        notifier:      :class:`~notifier.base.NotifierService` composite.
-        entry_prices:  Mutable dict mapping symbol → entry price.  Updated
-                       in-place when BUY signals are generated.
+        settings:        Application ``Settings`` instance.
+        kis:             Authenticated :class:`~data_agent.kis_api.KISClient`.
+        engine:          :class:`~strategy.signal.SignalEngine` instance.
+        notifier:        :class:`~notifier.base.NotifierService` composite.
+        position_store:  :class:`~data_agent.position_store.PositionStore` for
+                         persistent entry-price tracking across restarts.
+        signal_log:      Optional deque shared with the web dashboard; receives
+                         a dict summary for every non-HOLD signal detected.
     """
     logger = logging.getLogger(__name__)
+    if not is_market_open():
+        logger.info("장 운영 시간 외 — 사이클 스킵")
+        return
     logger.info("=== Monitoring cycle start ===")
 
     # ------------------------------------------------------------------
@@ -102,7 +119,7 @@ def run_cycle(
                 ohlcv_data[-1]["stck_clpr"] = str(int(current_price))
 
             # 2c. Evaluate signal
-            entry = entry_prices.get(symbol)
+            entry = position_store.get(symbol)
             signal: Signal = engine.evaluate(symbol, ohlcv_data, entry_price=entry)
 
             logger.info(
@@ -131,12 +148,29 @@ def run_cycle(
 
             # 2e. Track entry price when a buy fires
             if signal.signal_type == SignalType.BUY:
-                entry_prices[symbol] = signal.price
+                position_store.set(symbol, signal.price)
                 logger.info("%s: entry price recorded at %.0f", symbol, signal.price)
 
             # Clear entry price after stop-loss or sell
             if signal.signal_type in (SignalType.STOP_LOSS, SignalType.SELL):
-                entry_prices.pop(symbol, None)
+                position_store.delete(symbol)
+
+            # 2f. Push to web dashboard signal log
+            if signal_log is not None and signal.signal_type != SignalType.HOLD:
+                from datetime import datetime
+
+                signal_log.appendleft(
+                    {
+                        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "symbol": signal.symbol,
+                        "signal_type": signal.signal_type.value,
+                        "price": signal.price,
+                        "rsi": (
+                            round(signal.rsi, 1) if signal.rsi is not None else None
+                        ),
+                        "reason": signal.reason,
+                    }
+                )
 
         except Exception as exc:
             logger.error("Error processing symbol %s: %s", symbol, exc)
@@ -145,12 +179,38 @@ def run_cycle(
     logger.info("=== Monitoring cycle complete ===")
 
 
-def main() -> None:
-    """Initialise all components and start the scheduling loop.
+def _run_scheduler(
+    settings: Settings,
+    kis: KISClient,
+    engine: SignalEngine,
+    notifier: NotifierService,
+    position_store: PositionStore,
+    signal_log: Deque[Dict[str, Any]],
+) -> None:
+    """Blocking scheduler loop — runs inside a daemon thread."""
+    schedule.every(settings.monitor_interval_minutes).minutes.do(
+        run_cycle, settings, kis, engine, notifier, position_store, signal_log
+    )
+    # Fire once immediately so the first output is not delayed
+    run_cycle(settings, kis, engine, notifier, position_store, signal_log)
 
-    The bot fires immediately on startup (so you see output right away) and
-    then repeats every ``settings.monitor_interval_minutes`` minutes via the
-    ``schedule`` library.
+    logger = logging.getLogger(__name__)
+    logger.info(
+        "Scheduler active — next run in %d minute(s).",
+        settings.monitor_interval_minutes,
+    )
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
+
+def main() -> None:
+    """Initialise all components, start the bot in a background thread, and
+    serve the FastAPI dashboard on the main thread via uvicorn.
+
+    The scheduler loop (bot) runs as a daemon thread so it is automatically
+    cleaned up when the uvicorn process exits.  The web dashboard is available
+    at ``http://0.0.0.0:8000`` by default.
     """
     settings = Settings()
     setup_logger()
@@ -164,30 +224,30 @@ def main() -> None:
         ", ".join(settings.watch_symbols),
     )
 
-    # Initialise API clients and engine
-    kis = KISClient(settings)
-    engine = SignalEngine(settings)
-    notifier = NotifierService([KakaoNotifier(settings)])
+    # Shared state between bot loop and web dashboard
+    position_store = PositionStore("data/bot_state.db")
+    signal_log: Deque[Dict[str, Any]] = deque(maxlen=50)
 
-    # In-memory entry-price tracker { symbol: entry_price }
-    entry_prices: Dict[str, Optional[float]] = {}
-
-    # Register the recurring job
-    schedule.every(settings.monitor_interval_minutes).minutes.do(
-        run_cycle, settings, kis, engine, notifier, entry_prices
+    # Start the scheduler loop in a background daemon thread
+    bot_thread = threading.Thread(
+        target=_run_scheduler,
+        args=(
+            settings,
+            KISClient(settings),
+            SignalEngine(settings),
+            NotifierService([KakaoNotifier(settings)]),
+            position_store,
+            signal_log,
+        ),
+        daemon=True,
+        name="bot-scheduler",
     )
+    bot_thread.start()
+    logger.info("Bot scheduler thread started (daemon).")
 
-    # Run once immediately so the first output is not delayed
-    run_cycle(settings, kis, engine, notifier, entry_prices)
-
-    logger.info(
-        "Scheduler active — next run in %d minute(s).",
-        settings.monitor_interval_minutes,
-    )
-
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+    # Build the FastAPI app and serve it on the main thread
+    app = create_app(position_store, signal_log)
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
 
 
 if __name__ == "__main__":

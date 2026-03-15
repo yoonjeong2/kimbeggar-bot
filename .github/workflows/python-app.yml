@@ -135,3 +135,15 @@ jobs:
         run: |
           docker build -t kimbeggar:${{ github.sha }} .
           echo "✓ Docker build succeeded: kimbeggar:${{ github.sha }}"
+
+      # ----------------------------------------------------------------
+      # 3. Deploy to Render
+      #    Triggers a Render deploy webhook only on pushes to main.
+      #    Set RENDER_DEPLOY_HOOK in repository Settings → Secrets.
+      # ----------------------------------------------------------------
+      - name: Deploy to Render
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          curl --silent --show-error --fail \
+            "${{ secrets.RENDER_DEPLOY_HOOK }}"
+          echo "✓ Render deploy webhook triggered."
