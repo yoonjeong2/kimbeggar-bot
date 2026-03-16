@@ -15,6 +15,7 @@ is served by uvicorn on the main thread (default: http://0.0.0.0:8000).
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from collections import deque
@@ -247,7 +248,8 @@ def main() -> None:
 
     # Build the FastAPI app and serve it on the main thread
     app = create_app(position_store, signal_log)
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
 
 
 if __name__ == "__main__":

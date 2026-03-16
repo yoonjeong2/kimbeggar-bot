@@ -111,6 +111,21 @@ jobs:
           path: coverage.xml
           retention-days: 7
 
+      # ----------------------------------------------------------------
+      # 10. Upload coverage to Codecov
+      #     Set CODECOV_TOKEN in repository Settings → Secrets.
+      #     Token is optional for public repos but recommended.
+      # ----------------------------------------------------------------
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          flags: unittests
+          name: kimbeggar-${{ matrix.python-version }}
+          fail_ci_if_error: false
+
   # ================================================================
   # Job 2: Docker build (runs after lint-and-test succeeds)
   # ================================================================
@@ -142,8 +157,34 @@ jobs:
       #    Set RENDER_DEPLOY_HOOK in repository Settings → Secrets.
       # ----------------------------------------------------------------
       - name: Deploy to Render
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          secrets.RENDER_DEPLOY_HOOK != ''
         run: |
           curl --silent --show-error --fail \
             "${{ secrets.RENDER_DEPLOY_HOOK }}"
           echo "✓ Render deploy webhook triggered."
+
+      # ----------------------------------------------------------------
+      # 4. Deploy to Heroku (optional)
+      #    Activated only when HEROKU_API_KEY and HEROKU_APP_NAME secrets
+      #    are configured.  Uses heroku.yml (Container Registry) so the
+      #    same Dockerfile that passes CI is deployed to production.
+      #
+      #    Required secrets:
+      #      HEROKU_API_KEY   — from https://dashboard.heroku.com/account
+      #      HEROKU_APP_NAME  — your Heroku app name (e.g. "kimbeggar-prod")
+      #      HEROKU_EMAIL     — Heroku account e-mail address
+      # ----------------------------------------------------------------
+      - name: Deploy to Heroku
+        if: >
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          secrets.HEROKU_API_KEY != ''
+        uses: akhileshns/heroku-deploy@v3.13.15
+        with:
+          heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
+          heroku_app_name: ${{ secrets.HEROKU_APP_NAME }}
+          heroku_email: ${{ secrets.HEROKU_EMAIL }}
+          usedocker: true

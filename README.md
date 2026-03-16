@@ -4,7 +4,7 @@
 > RSI + 이동평균 크로스오버로 매매 시그널을 탐지하고, 시장 급락 시 인버스 ETF 헤지를 자동 알림하는 국내 주식 모니터링 봇.
 
 ![CI](https://github.com/yoonjeong2/kimbeggar-bot/actions/workflows/python-app.yml/badge.svg)
-![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
+[![codecov](https://codecov.io/gh/yoonjeong2/kimbeggar-bot/graph/badge.svg)](https://codecov.io/gh/yoonjeong2/kimbeggar-bot)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
