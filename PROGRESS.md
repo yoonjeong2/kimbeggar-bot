@@ -15,6 +15,7 @@
 | **Phase 3** | 2026-03-13 | 핵심 트레이딩 로직 (SignalEngine, 지표, 헤지 비율) | `6c90711`, `78fa626` | 58 | **100 %** |
 | **Phase 4** | 2026-03-13~14 | 테스트 스위트 92 %, Docker CI, backtrader 백테스트 | `0c64e81`, `2ec64d5`, `877ca1c` | 185 | **100 %** |
 | **Phase 5** | 2026-03-16 | SQLite 영속성, 장시간 필터, FastAPI 대시보드, CD | `f48fc6f` | 207 | **100 %** |
+| **Phase 6** | 2026-03-16 | ML 변동성 예측, WebSocket 대시보드, 페이퍼 트레이딩, 2022 백테스트 | `de29e38`, 현재 | **252** | **100 %** |
 
 ---
 
@@ -221,26 +222,75 @@ push → main
 
 ---
 
+## Phase 6 — ML 변동성 예측 · WebSocket 대시보드 · 페이퍼 트레이딩 · 2022 백테스트
+
+**기간**: 2026-03-16
+**커밋**: `de29e38` + 현재 작업
+
+### 수행 작업
+
+| 항목 | 파일 | 테스트 수 | 결과 |
+|---|---|---|---|
+| `predict_volatility()` walk-forward LinearRegression 구현 | `strategy/hedge_logic.py` | (기존 포함) | ✅ |
+| 2022 코스피 대폭락 7-phase GBM 시뮬레이션 스크립트 | `scripts/backtest_2022_crash.py` | — | ✅ B&H -31.9% vs 방어 |
+| `ConnectionManager` 이벤트 구동 WebSocket 브로드캐스트 | `api/app.py` | 10 (WS) | ✅ |
+| `/ws` 엔드포인트 (2초 heartbeat 폴백, 지수 백오프 JS) | `api/app.py` | — | ✅ |
+| 모바일 반응형 CSS Grid 대시보드 HTML | `api/app.py` | — | ✅ |
+| `PaperTradeStore` (paper_trades SQLite 테이블) | `data_agent/paper_trade_store.py` | 24 | ✅ |
+| `PAPER_TRADING` 환경변수 + Settings 필드 | `config/settings.py` | — | ✅ |
+| `run_cycle()` broadcaster + paper_trade_store 연결 | `main.py` | — | ✅ |
+| README Phase 6 기술 로드맵 + 페이퍼 트레이딩 섹션 | `README.md` | — | ✅ |
+| CHANGELOG.md AI-Native 스니펫 전면 업데이트 | `CHANGELOG.md` | — | ✅ |
+| **최종 테스트 수** | 전체 | **252** | **252/252 PASSED** |
+
+### AI 프롬프트 (요약)
+
+> **세션 1 — ML 변동성 예측 + 백테스트**
+> *"predict_volatility() TODO 스텁을 scikit-learn LinearRegression walk-forward로 구현해 줘.*
+> *scripts/backtest_2022_crash.py로 2022 하락장 7-phase GBM 시뮬레이션 결과를 출력해 줘."*
+>
+> **세션 2 — WebSocket 실시간 대시보드**
+> *"api/app.py에 /ws WebSocket을 추가해서, 봇에서 시그널 발생 시 연결 클라이언트에게*
+> *JSON을 실시간으로 브로드캐스팅해 줘. 대시보드 HTML도 모바일 반응형으로 개선해 줘."*
+>
+> **세션 3 — 페이퍼 트레이딩 모드 + 문서화**
+> *"config에 PAPER_TRADING 모드를 추가해서, 이 모드가 켜지면 paper_trades 테이블에*
+> *가상 체결 내역을 기록하도록 해 줘. README, PROGRESS.md, CHANGELOG.md에 Phase 6*
+> *Alpaca API WebSocket 기술 로드맵을 매우 상세하게 추가해 줘."*
+
+### 핵심 설계 결정
+
+```
+[기존] 전략 실행 → 알림 전송
+[Phase 6] 전략 실행 → 알림 전송
+                   → WebSocket 브로드캐스트 (ConnectionManager)
+                   → 페이퍼 체결 기록 (PaperTradeStore)
+```
+
+---
+
 ## AI 도구 활용 전체 통계
 
 | 지표 | 값 |
 |---|---|
 | 사용 AI 모델 | Claude Sonnet 4.6 (Anthropic) |
 | 전체 개발 기간 | 2026-03-13 ~ 2026-03-16 (4일) |
-| 총 커밋 수 | 8개 (`80b4d5c` → `f48fc6f`) |
-| 최종 테스트 수 | 207개 (207/207 PASSED) |
-| 최종 테스트 커버리지 | 92 % |
+| 총 커밋 수 | 10개 (`80b4d5c` → 현재) |
+| 최종 테스트 수 | **252개 (252/252 PASSED)** |
+| 최종 테스트 커버리지 | 92 %+ |
 | AI 코드 생성 비율 | **100 %** (아키텍처 설계 ~ 테스트 작성 전 과정) |
 | 개발자 역할 | 비즈니스 요구사항 정의, API 키 제공, 실제 환경 검증 |
 
 ---
 
-## 향후 과제 (Phase 6 Backlog)
+## Phase 7 Backlog (Alpaca API 연동)
 
 | 항목 | 우선순위 | 비고 |
 |---|---|---|
-| 웹소켓 실시간 시세 | 중 | KIS WebSocket API 검토 |
-| 변동성 기반 포지션 사이징 | 중 | Kelly criterion |
+| `data_agent/alpaca_api.py` 구현 | 높음 | REST OHLCV + 현재가 (KISClient 동일 인터페이스) |
+| `AlpacaClient.subscribe_realtime()` | 높음 | IEX WebSocket → ConnectionManager 실시간 브로드캐스트 |
+| `BaseBrokerClient` 추상화 | 중 | KISClient / AlpacaClient 공통 인터페이스 |
+| Alpaca Paper Trading 주문 연동 | 중 | POST /v2/orders → PaperTradeStore 병행 기록 |
+| 변동성 기반 포지션 사이징 | 중 | Kelly criterion + predict_volatility() |
 | 텔레그램 채널 추가 | 저 | `BaseNotifier` 구현만으로 가능 |
 | 백테스트 시각화 대시보드 | 저 | FastAPI + Chart.js |
-| 멀티 계좌 / 멀티 종목 확장 | 저 | settings.watch_symbols 확장 |

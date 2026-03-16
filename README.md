@@ -29,7 +29,10 @@
 15. [운영 체크리스트](#15-운영-체크리스트)
 16. [Docker & 크로스 플랫폼](#16-docker--크로스-플랫폼)
 17. [확장 가이드 — 새 채널 & 암호화폐](#17-확장-가이드--새-채널--암호화폐)
-18. [기여 가이드 (Contributing)](#18-기여-가이드-contributing)
+18. [호환성 (Compatibility)](#18-호환성-compatibility)
+19. [페이퍼 트레이딩 모드 (PAPER_TRADING)](#19-페이퍼-트레이딩-모드-paper_trading)
+20. [Phase 6 기술 로드맵 — Alpaca API & WebSocket 실시간 시세](#20-phase-6-기술-로드맵--alpaca-api--websocket-실시간-시세)
+21. [기여 가이드 (Contributing)](#21-기여-가이드-contributing)
 
 ---
 
@@ -81,7 +84,8 @@ alpaca = AlpacaClient(settings) # Phase 6: 미국 Alpaca
 | 항목 | 일반 알림 봇 | **KimBeggar** |
 |---|---|---|
 | **헤지 전략** | 단순 가격 알림만 제공 | **실시간 인버스 ETF 헤지 비율 자동 산출** (MA 이탈 + 지수 급락 복합 반영) |
-| **ML 기반 동적 헤지** | 없음 | **scikit-learn LinearRegression으로 변동성 예측** → 헤지 비율을 시장 상황에 맞게 동적 조정 (Phase 6 구현 예정) |
+| **ML 기반 동적 헤지** | 없음 | **scikit-learn LinearRegression으로 변동성 예측** → 헤지 비율을 시장 상황에 맞게 동적 조정 (`predict_volatility()` 구현 완료) |
+| **페이퍼 트레이딩** | 없음 | **PAPER_TRADING=true** 한 줄로 활성화 — 가상 체결을 SQLite `paper_trades` 테이블에 기록, P&L 집계 |
 | **알림 채널 확장** | 단일 채널 하드코딩 | **Observer 패턴** — `BaseNotifier` ABC 구현으로 카카오·텔레그램·슬랙 코어 수정 없이 추가 가능 |
 | **신호 우선순위** | 단순 조건 판별 | **4단계 우선순위 체계** (STOP_LOSS > SELL > BUY > HOLD) |
 | **에러 복구** | 예외 시 중단 | **Tenacity 재시도** (지수 백오프, 최대 3회) + **에러 발생 시 카카오 알림** |
@@ -104,15 +108,15 @@ KimBeggar:
 ### ML 기반 동적 헤지란?
 
 헤지 비율을 **고정 공식**이 아닌 **학습된 변동성 예측값**으로 조정하는 방식입니다.
-`strategy/hedge_logic.py`의 `predict_volatility()` 함수(TODO)가 이를 담당합니다.
+`strategy/hedge_logic.py`의 `predict_volatility()` 함수로 **구현 완료**되어 있습니다.
 
 ```
 현재 방식: 헤지 비율 = base_ratio + MA이탈분 + 지수급락분  (규칙 기반)
-ML 방식:   헤지 비율 = base_ratio + ML예측_변동성  (데이터 기반)
+ML 방식:   헤지 비율 = predict_volatility(returns) × 0.5   (데이터 기반)
                               ↑
-              scikit-learn LinearRegression
-              입력: 과거 N일 수익률, ATR, 거래량 변화율
-              출력: 다음 봉 예상 변동성 (annualized)
+              scikit-learn LinearRegression (walk-forward 학습)
+              입력: 과거 N일 수익률의 mean / std / slope / min / max
+              출력: 다음 봉 예상 연율화 변동성 (annualized)
 ```
 
 ---
@@ -304,6 +308,11 @@ HEDGE_RATIO=0.3            # 30 % 헤지
 # 개발 환경: true → SSL 검증 우회 (로컬 인증서 문제 대응)
 # 운영 배포: false 로 변경하면 전체 TLS 검증 자동 복원
 DEV_MODE=true
+
+# ── 페이퍼 트레이딩 ──────────────────────────────────────────────
+# true: 실제 주문 없이 가상 체결을 data/bot_state.db의 paper_trades 테이블에 기록
+# false (기본값): 알림만 전송, paper_trades 테이블 미사용
+PAPER_TRADING=false
 ```
 
 > **보안 주의** — `.env`, `data/kakao_token.json`은 반드시 `.gitignore`에 추가하세요.
@@ -763,7 +772,312 @@ python -c "import talib; print('TA-Lib OK:', talib.__version__)"
 
 ---
 
-## 19. 기여 가이드 (Contributing)
+## 19. 페이퍼 트레이딩 모드 (PAPER_TRADING)
+
+실제 자금 없이 전략을 검증할 수 있는 **가상 체결 기록 모드**입니다.
+`PAPER_TRADING=true`로 활성화하면 non-HOLD 시그널이 발생할 때마다
+KIS API 주문 대신 SQLite `paper_trades` 테이블에 체결 내역을 기록합니다.
+
+### 활성화
+
+```dotenv
+# .env
+PAPER_TRADING=true
+```
+
+### 동작 원리
+
+```
+시그널 발생 (BUY / SELL / STOP_LOSS / HEDGE)
+    │
+    ├─ [항상] NotifierService → 카카오톡 알림 전송
+    │
+    └─ [PAPER_TRADING=true] PaperTradeStore.record()
+            │
+            └─ data/bot_state.db / paper_trades 테이블에 INSERT
+```
+
+### paper_trades 테이블 스키마
+
+```sql
+CREATE TABLE IF NOT EXISTS paper_trades (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol      TEXT    NOT NULL,         -- 종목 코드 (예: '005930')
+    signal_type TEXT    NOT NULL,         -- 'BUY' | 'SELL' | 'STOP_LOSS' | 'HEDGE'
+    price       REAL    NOT NULL,         -- 체결 가격 (KRW)
+    quantity    INTEGER NOT NULL DEFAULT 1,
+    total_krw   REAL    NOT NULL,         -- price × quantity
+    traded_at   TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+);
+```
+
+### 페이퍼 트레이딩 결과 조회
+
+```python
+from data_agent.paper_trade_store import PaperTradeStore
+
+store = PaperTradeStore("data/bot_state.db")
+
+# 전체 체결 내역 (newest first)
+trades = store.get_all()
+# [{"id": 5, "symbol": "005930", "signal_type": "SELL", "price": 75000.0, ...}, ...]
+
+# 종목별 P&L 요약
+summary = store.get_summary()
+# {"005930": {"bought_krw": 700000.0, "sold_krw": 750000.0,
+#             "pnl_krw": 50000.0, "trades": 2}}
+```
+
+### 로그 예시 (PAPER_TRADING=true)
+
+```
+2026-03-16 09:31:04 [INFO] __main__: PAPER_TRADING mode active — all fills recorded to data/bot_state.db
+2026-03-16 09:31:05 [INFO] __main__: 005930 | BUY | price=71500 | RSI=27.8
+2026-03-16 09:31:05 [INFO] __main__: [PAPER] BUY 005930 @ 71500 체결 기록
+2026-03-16 09:36:06 [INFO] __main__: 005930 | STOP_LOSS | price=67800 | RSI=31.2
+2026-03-16 09:36:06 [INFO] __main__: [PAPER] STOP_LOSS 005930 @ 67800 체결 기록
+```
+
+---
+
+## 20. Phase 6 기술 로드맵 — Alpaca API & WebSocket 실시간 시세
+
+KimBeggar Phase 6는 국내 KIS API 아키텍처를 **미국 Alpaca API**로 확장하는 단계입니다.
+동일한 전략 엔진(RSI + MA + 동적 헤지)을 미국 주식·ETF에 적용하며,
+Alpaca의 **WebSocket 실시간 시세**를 KimBeggar 대시보드 WebSocket과 통합합니다.
+
+### 아키텍처 개요
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                        KimBeggar Phase 6 Architecture                    │
+│                                                                          │
+│  Alpaca API                    KimBeggar Core              Dashboard     │
+│  ┌─────────────────────┐       ┌────────────────┐       ┌────────────┐  │
+│  │  REST API           │       │                │       │            │  │
+│  │  /v2/assets         │──────▶│  AlpacaClient  │──────▶│ SignalEng. │  │
+│  │  /v2/bars           │       │  (data_agent/) │       │            │  │
+│  │  /v2/orders  (PT)   │       └────────────────┘       └─────┬──────┘  │
+│  │                     │                                       │         │
+│  │  WebSocket          │       ┌────────────────┐             │         │
+│  │  wss://stream.      │       │ ConnectionMgr  │◀────────────┘         │
+│  │  data.alpaca.       │──────▶│ (api/app.py)   │                       │
+│  │  markets/v2/iex     │       │ broadcast_     │──────▶ Browser WS     │
+│  │  (실시간 시세)        │       │ threadsafe()   │       /ws endpoint    │
+│  └─────────────────────┘       └────────────────┘                       │
+│                                                                          │
+│  Paper Trading (Alpaca)                                                  │
+│  ┌────────────────────────────────────────────────────────────────────┐  │
+│  │  Alpaca Paper Account (무료)                                        │  │
+│  │  ├── POST /v2/orders  → 가상 주문 체결 (KIS simulate_trade와 동일)  │  │
+│  │  └── GET  /v2/positions → 포지션 조회 (data/bot_state.db와 병행)   │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+### AlpacaClient 설계 (예정 코드)
+
+```python
+# data_agent/alpaca_api.py  — Phase 6 예정 구현
+from __future__ import annotations
+
+import asyncio
+import json
+import threading
+from typing import Any, Callable, Dict, List, Optional
+
+import requests
+import websockets
+
+
+class AlpacaClient:
+    """Alpaca Markets REST + WebSocket 클라이언트.
+
+    KISClient와 동일한 인터페이스를 노출하여 main.py 코드 변경 없이
+    브로커를 교체할 수 있도록 설계합니다.
+    """
+
+    _BASE_REST  = "https://data.alpaca.markets"
+    _BASE_TRADE = "https://paper-api.alpaca.markets"  # Paper Trading
+    _WS_URL     = "wss://stream.data.alpaca.markets/v2/iex"
+
+    def __init__(self, settings: Settings) -> None:
+        self._key    = settings.alpaca_api_key_id
+        self._secret = settings.alpaca_api_secret_key
+        self._headers = {
+            "APCA-API-KEY-ID":     self._key,
+            "APCA-API-SECRET-KEY": self._secret,
+        }
+
+    # ── REST: KISClient 호환 인터페이스 ─────────────────────────────────
+    def get_ohlcv_daily(self, symbol: str, period: int = 60) -> List[Dict]:
+        """일봉 OHLCV — KISClient.get_ohlcv_daily()와 동일 반환 형식."""
+        resp = requests.get(
+            f"{self._BASE_REST}/v2/stocks/{symbol}/bars",
+            headers=self._headers,
+            params={"timeframe": "1Day", "limit": period},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        bars = resp.json().get("bars", [])
+        return [
+            {
+                "stck_bsop_date": bar["t"][:10].replace("-", ""),
+                "stck_oprc": str(bar["o"]),
+                "stck_hgpr": str(bar["h"]),
+                "stck_lwpr": str(bar["l"]),
+                "stck_clpr": str(bar["c"]),
+                "acml_vol":  str(bar["v"]),
+            }
+            for bar in bars
+        ]
+
+    def get_current_price(self, symbol: str) -> Dict[str, Any]:
+        """최신 호가 — KISClient.get_current_price()와 동일 키 반환."""
+        resp = requests.get(
+            f"{self._BASE_REST}/v2/stocks/{symbol}/quotes/latest",
+            headers=self._headers,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        quote = resp.json().get("quote", {})
+        mid = (quote.get("ap", 0) + quote.get("bp", 0)) / 2
+        return {"stck_prpr": str(mid)}
+
+    # ── WebSocket: 실시간 시세 수신 ────────────────────────────────────
+    def subscribe_realtime(
+        self,
+        symbols: List[str],
+        on_trade: Callable[[Dict[str, Any]], None],
+    ) -> None:
+        """백그라운드 스레드에서 Alpaca IEX WebSocket을 구독합니다.
+
+        수신된 trade 이벤트마다 ``on_trade(event)`` 콜백을 호출합니다.
+        ConnectionManager.broadcast_threadsafe()를 콜백으로 전달하면
+        대시보드 WebSocket 클라이언트에 실시간으로 데이터를 푸시할 수 있습니다.
+        """
+        thread = threading.Thread(
+            target=self._ws_loop,
+            args=(symbols, on_trade),
+            daemon=True,
+            name="alpaca-ws",
+        )
+        thread.start()
+
+    def _ws_loop(
+        self,
+        symbols: List[str],
+        on_trade: Callable[[Dict[str, Any]], None],
+    ) -> None:
+        asyncio.run(self._ws_connect(symbols, on_trade))
+
+    async def _ws_connect(
+        self,
+        symbols: List[str],
+        on_trade: Callable[[Dict[str, Any]], None],
+    ) -> None:
+        async with websockets.connect(self._WS_URL) as ws:
+            # 인증
+            await ws.send(json.dumps({
+                "action": "auth",
+                "key":    self._key,
+                "secret": self._secret,
+            }))
+            # 구독
+            await ws.send(json.dumps({
+                "action":  "subscribe",
+                "trades":  symbols,
+            }))
+            async for raw in ws:
+                msgs = json.loads(raw)
+                for msg in msgs:
+                    if msg.get("T") == "t":   # trade event
+                        on_trade({
+                            "symbol": msg["S"],
+                            "price":  msg["p"],
+                            "size":   msg["s"],
+                            "time":   msg["t"],
+                        })
+```
+
+### 실시간 데이터 흐름 (Phase 6)
+
+```
+Alpaca WebSocket (IEX feed)
+    │  trade event {symbol, price, size, time}
+    ▼
+AlpacaClient._ws_loop()  ← daemon thread
+    │
+    │  on_trade(event) callback
+    ▼
+ConnectionManager.broadcast_threadsafe(payload)
+    │  asyncio.run_coroutine_threadsafe → FastAPI event loop
+    ▼
+ConnectionManager.broadcast(payload)
+    │  payload → each client asyncio.Queue
+    ▼
+/ws WebSocket handler
+    │  q.get() → ws.send_json(payload)
+    ▼
+Browser Dashboard (실시간 가격 갱신, 0.5s 이하 지연)
+```
+
+### 필요한 환경변수 (Phase 6)
+
+```dotenv
+# .env — Phase 6 추가 항목
+ALPACA_API_KEY_ID=your_alpaca_key_id
+ALPACA_API_SECRET_KEY=your_alpaca_secret_key
+ALPACA_PAPER=true               # true: Paper Trading / false: Live
+WATCH_SYMBOLS_US=AAPL,MSFT,SPY  # 미국 종목 코드 (Alpaca 용)
+```
+
+### Settings 확장 (Phase 6)
+
+```python
+# config/settings.py — Phase 6 추가 필드
+alpaca_api_key_id:     str  = field(default_factory=lambda: os.getenv("ALPACA_API_KEY_ID", ""))
+alpaca_api_secret_key: str  = field(default_factory=lambda: os.getenv("ALPACA_API_SECRET_KEY", ""))
+alpaca_paper:          bool = field(default_factory=lambda: os.getenv("ALPACA_PAPER", "true").lower() == "true")
+watch_symbols_us: List[str] = field(default_factory=lambda: os.getenv("WATCH_SYMBOLS_US", "").split(","))
+```
+
+### main.py 교체 예시 (코드 변경 최소화)
+
+```python
+# main.py — Phase 6: 브로커 교체 시 이 블록만 수정
+if settings.alpaca_api_key_id:
+    from data_agent.alpaca_api import AlpacaClient
+    kis = AlpacaClient(settings)          # ← KISClient 대신 AlpacaClient
+    watch = settings.watch_symbols_us
+    # WebSocket 실시간 구독 시작
+    kis.subscribe_realtime(watch, ws_manager.broadcast_threadsafe)
+else:
+    kis = KISClient(settings)             # 기존 한국 KIS API
+    watch = settings.watch_symbols
+```
+
+### Phase 6 구현 마일스톤
+
+| 단계 | 작업 | 예상 결과 |
+|---|---|---|
+| **6-1** | `data_agent/alpaca_api.py` 작성 | REST OHLCV / 현재가 → KISClient 동일 인터페이스 |
+| **6-2** | `AlpacaClient.subscribe_realtime()` 구현 | Alpaca IEX WebSocket → ConnectionManager 실시간 브로드캐스트 |
+| **6-3** | `config/settings.py` 확장 | `ALPACA_API_KEY_ID`, `WATCH_SYMBOLS_US` 추가 |
+| **6-4** | Alpaca Paper Trading 주문 연동 | `POST /v2/orders` → PaperTradeStore와 병행 기록 |
+| **6-5** | `tests/test_alpaca_api.py` 작성 | `responses` 라이브러리로 REST mock, asyncio mock WS |
+| **6-6** | 멀티 브로커 추상화 (`BaseBrokerClient`) | 공통 인터페이스 추출 → `KISClient` / `AlpacaClient` 양쪽 적용 |
+
+### Alpaca Paper Trading 계정 무료 생성
+
+1. [alpaca.markets](https://alpaca.markets) 가입
+2. **Paper Trading** 계정 활성화 (신용카드 불필요)
+3. API Keys 발급 → `.env`에 `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` 기입
+4. `ALPACA_PAPER=true` 설정 → 실제 자금 없이 미국장 전략 검증 가능
+
+---
+
+## 21. 기여 가이드 (Contributing)
 
 KimBeggar는 오픈소스 프로젝트입니다. 개선 아이디어나 버그 리포트를 환영합니다!
 

@@ -27,6 +27,7 @@ import uvicorn
 from api.app import ConnectionManager, create_app
 from config.settings import Settings
 from data_agent.kis_api import KISClient
+from data_agent.paper_trade_store import PaperTradeStore
 from data_agent.position_store import PositionStore
 from logger.log_setup import setup_logger
 from notifier import NotifierService
@@ -43,6 +44,7 @@ def run_cycle(
     position_store: PositionStore,
     signal_log: Optional[Deque[Dict[str, Any]]] = None,
     broadcaster: Optional[ConnectionManager] = None,
+    paper_trade_store: Optional[PaperTradeStore] = None,
 ) -> None:
     """Execute one full monitoring cycle across all watched symbols.
 
@@ -60,18 +62,22 @@ def run_cycle(
        e. Persist entry price to SQLite when a BUY signal fires.
        f. Append signal metadata to ``signal_log`` for the web dashboard.
        g. Broadcast updated state to all connected WebSocket clients.
+       h. Record simulated fill to ``paper_trades`` when PAPER_TRADING is on.
 
     Args:
-        settings:        Application ``Settings`` instance.
-        kis:             Authenticated :class:`~data_agent.kis_api.KISClient`.
-        engine:          :class:`~strategy.signal.SignalEngine` instance.
-        notifier:        :class:`~notifier.base.NotifierService` composite.
-        position_store:  :class:`~data_agent.position_store.PositionStore` for
-                         persistent entry-price tracking across restarts.
-        signal_log:      Optional deque shared with the web dashboard; receives
-                         a dict summary for every non-HOLD signal detected.
-        broadcaster:     Optional :class:`~api.app.ConnectionManager` used to
-                         push real-time updates to connected WebSocket clients.
+        settings:          Application ``Settings`` instance.
+        kis:               Authenticated :class:`~data_agent.kis_api.KISClient`.
+        engine:            :class:`~strategy.signal.SignalEngine` instance.
+        notifier:          :class:`~notifier.base.NotifierService` composite.
+        position_store:    :class:`~data_agent.position_store.PositionStore` for
+                           persistent entry-price tracking across restarts.
+        signal_log:        Optional deque shared with the web dashboard; receives
+                           a dict summary for every non-HOLD signal detected.
+        broadcaster:       Optional :class:`~api.app.ConnectionManager` used to
+                           push real-time updates to connected WebSocket clients.
+        paper_trade_store: Optional :class:`~data_agent.paper_trade_store.PaperTradeStore`
+                           active when ``settings.paper_trading`` is ``True``.
+                           Every non-HOLD signal is recorded as a virtual fill.
     """
     logger = logging.getLogger(__name__)
     if not is_market_open():
@@ -187,6 +193,20 @@ def run_cycle(
                         }
                     )
 
+                # 2h. Paper-trading: record simulated fill (no real order)
+                if paper_trade_store is not None:
+                    paper_trade_store.record(
+                        symbol=signal.symbol,
+                        signal_type=signal.signal_type.value,
+                        price=signal.price,
+                    )
+                    logger.info(
+                        "[PAPER] %s %s @ %.0f 체결 기록",
+                        signal.signal_type.value,
+                        signal.symbol,
+                        signal.price,
+                    )
+
         except Exception as exc:
             logger.error("Error processing symbol %s: %s", symbol, exc)
             notifier.send_error(f"[{symbol}] Error processing symbol: {exc}")
@@ -202,13 +222,31 @@ def _run_scheduler(
     position_store: PositionStore,
     signal_log: Deque[Dict[str, Any]],
     broadcaster: Optional[ConnectionManager] = None,
+    paper_trade_store: Optional[PaperTradeStore] = None,
 ) -> None:
     """Blocking scheduler loop — runs inside a daemon thread."""
     schedule.every(settings.monitor_interval_minutes).minutes.do(
-        run_cycle, settings, kis, engine, notifier, position_store, signal_log, broadcaster
+        run_cycle,
+        settings,
+        kis,
+        engine,
+        notifier,
+        position_store,
+        signal_log,
+        broadcaster,
+        paper_trade_store,
     )
     # Fire once immediately so the first output is not delayed
-    run_cycle(settings, kis, engine, notifier, position_store, signal_log, broadcaster)
+    run_cycle(
+        settings,
+        kis,
+        engine,
+        notifier,
+        position_store,
+        signal_log,
+        broadcaster,
+        paper_trade_store,
+    )
 
     logger = logging.getLogger(__name__)
     logger.info(
@@ -244,6 +282,11 @@ def main() -> None:
     position_store = PositionStore("data/bot_state.db")
     signal_log: Deque[Dict[str, Any]] = deque(maxlen=50)
     ws_manager = ConnectionManager()
+    paper_store: Optional[PaperTradeStore] = (
+        PaperTradeStore("data/bot_state.db") if settings.paper_trading else None
+    )
+    if paper_store is not None:
+        logger.info("PAPER_TRADING mode active — all fills recorded to data/bot_state.db")
 
     # Start the scheduler loop in a background daemon thread
     bot_thread = threading.Thread(
@@ -256,6 +299,7 @@ def main() -> None:
             position_store,
             signal_log,
             ws_manager,
+            paper_store,
         ),
         daemon=True,
         name="bot-scheduler",

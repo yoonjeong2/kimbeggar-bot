@@ -99,6 +99,9 @@ class Settings:
     dev_mode: bool = field(
         default_factory=lambda: os.getenv("DEV_MODE", "false").lower() == "true"
     )
+    paper_trading: bool = field(
+        default_factory=lambda: os.getenv("PAPER_TRADING", "false").lower() == "true"
+    )
 
     def __post_init__(self) -> None:
         """Load ``.env`` and re-apply environment variables over field defaults.
@@ -117,6 +120,7 @@ class Settings:
         )
         self.kakao_token_file = os.getenv("KAKAO_TOKEN_FILE", self.kakao_token_file)
         self.dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
+        self.paper_trading = os.getenv("PAPER_TRADING", "false").lower() == "true"
 
     @property
     def kis_base_url(self) -> str:

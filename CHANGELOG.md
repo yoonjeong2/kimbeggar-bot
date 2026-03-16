@@ -13,20 +13,132 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 - `data_agent/position_store.py` — SQLite-backed `PositionStore` class; entry prices
   now survive bot restarts (`data/bot_state.db`).
+- `data_agent/paper_trade_store.py` — `PaperTradeStore` class; virtual fill ledger in
+  `paper_trades` SQLite table; `record()` / `get_all()` / `get_by_symbol()` /
+  `get_summary()` (P&L per symbol); 24 unit tests.
 - `strategy.signal.is_market_open()` — Korean market hours filter (weekdays 09:00–15:30);
   `run_cycle()` skips execution outside trading hours.
-- `api/app.py` — FastAPI 경량 웹 대시보드 (`/`, `/api/status`, `/api/positions`, `/api/signals`).
+- `strategy.hedge_logic.predict_volatility()` — walk-forward scikit-learn
+  `LinearRegression` volatility forecast; features: mean / std / slope / min / max;
+  annualised output; falls back to rolling std when data is insufficient.
+- `api/app.py` — `ConnectionManager` event-driven WebSocket broadcast hub
+  (per-client `asyncio.Queue`; `broadcast_threadsafe()` for cross-thread use);
+  `/ws` endpoint with 2 s heartbeat fallback; mobile-responsive CSS Grid HTML
+  dashboard; JS exponential-backoff reconnect.
+- `api/app.py` — FastAPI REST 엔드포인트 (`/`, `/api/status`, `/api/positions`, `/api/signals`).
+- `scripts/backtest_2022_crash.py` — 2022 코스피 대폭락 7-phase GBM 시뮬레이션;
+  Buy&Hold -31.90% vs KimBeggar 방어선 비교; ML 헤지 권고 11회.
+- `tests/test_paper_trade_store.py` — PaperTradeStore CRUD + P&L + 영속성 검증 (24 tests).
 - `tests/test_position_store.py` — PositionStore CRUD + upsert 검증 (11 tests).
-- `tests/test_e2e.py` — FastAPI TestClient 기반 E2E 테스트 (22 tests).
-- `tests/test_main.py` — market-hours 스킵 테스트; PositionStore mock 주입.
+- `tests/test_e2e.py` — FastAPI TestClient E2E + WebSocket + DEV_MODE 시뮬레이션 (43 tests).
+- `tests/test_main.py` — market-hours 스킵 + PositionStore mock 주입.
 - `tests/test_strategy.py` — `TestIsMarketOpen` 경계값 7개 테스트.
-- `.github/workflows/python-app.yml` — Deploy to Render CD 스텝 (RENDER_DEPLOY_HOOK).
-- `PROGRESS.md` — Phase 1~5 타임라인 및 AI 도구 활용 기록.
+- `.github/workflows/python-app.yml` — Deploy to Render CD + Heroku 옵션 + Codecov 업로드.
+- `PROGRESS.md` — Phase 1~6 타임라인 및 AI 도구 활용 기록.
+- `README.md` — 페이퍼 트레이딩 섹션(19), Phase 6 Alpaca 기술 로드맵 섹션(20).
 
 ### Changed
 - `main.py` — `entry_prices` dict → `PositionStore`; 스케줄러를 데몬 스레드로 분리;
-  uvicorn으로 FastAPI 대시보드 기동; `run_cycle()` 파라미터 및 docstring 갱신.
-- `requirements.txt` — `fastapi>=0.110.0`, `uvicorn[standard]>=0.29.0` 추가.
+  uvicorn으로 FastAPI 대시보드 기동; `run_cycle()` 파라미터 갱신
+  (`broadcaster`, `paper_trade_store` 추가); PORT 환경변수 지원.
+- `config/settings.py` — `paper_trading: bool` 필드 추가 (`PAPER_TRADING` env var).
+- `requirements.txt` — `fastapi`, `uvicorn[standard]`, `scikit-learn>=1.4.0` 추가.
+
+> **🤖 Claude 프롬프트 요약 — ML 변동성 예측 + 백테스트**
+>
+> *"predict_volatility() TODO 스텁을 scikit-learn LinearRegression walk-forward로*
+> *구현해 줘. scripts/backtest_2022_crash.py로 2022 하락장 시뮬레이션 결과를 출력해 줘."*
+
+```python
+# strategy/hedge_logic.py — predict_volatility() walk-forward 핵심 로직
+def predict_volatility(returns: List[float], window: int = 10) -> float:
+    arr = np.array(returns, dtype=float)
+    if len(arr) < 2 * window + 1:
+        return round(float(np.std(arr, ddof=1)) * (252**0.5), 6)
+    X_rows, y_vals = [], []
+    t = np.arange(window, dtype=float)
+    for i in range(len(arr) - 2 * window):
+        w = arr[i:i+window]; nxt = arr[i+window:i+2*window]
+        X_rows.append([w.mean(), w.std(ddof=1), np.polyfit(t,w,1)[0], w.min(), w.max()])
+        y_vals.append(float(nxt.std(ddof=1)))
+    lr = LinearRegression().fit(np.array(X_rows), np.array(y_vals))
+    last = arr[-window:]
+    pred = max(float(lr.predict([[last.mean(), last.std(ddof=1),
+                np.polyfit(t,last,1)[0], last.min(), last.max()]])[0]), 0.0)
+    return round(pred * (252**0.5), 6)
+```
+
+> **🤖 Claude 프롬프트 요약 — WebSocket 대시보드**
+>
+> *"api/app.py에 /ws WebSocket 엔드포인트를 추가해서, 봇에서 새로운 시그널이*
+> *발생하거나 포지션이 변경될 때 연결된 클라이언트에게 JSON을 실시간으로*
+> *브로드캐스팅하도록 리팩토링해 줘. 대시보드 HTML도 모바일 반응형으로 개선해 줘."*
+
+```python
+# api/app.py — ConnectionManager 핵심 설계
+class ConnectionManager:
+    async def connect(self, ws: WebSocket) -> asyncio.Queue:
+        await ws.accept()
+        q: asyncio.Queue = asyncio.Queue(maxsize=100)
+        self._clients[ws] = q
+        return q
+
+    def broadcast_threadsafe(self, payload: Dict[str, Any]) -> None:
+        """bot 스레드에서 FastAPI 이벤트 루프로 안전하게 브로드캐스트."""
+        if self._loop and not self._loop.is_closed():
+            asyncio.run_coroutine_threadsafe(self.broadcast(payload), self._loop)
+
+# /ws 엔드포인트 — 이벤트 구동 + 2초 heartbeat 폴백
+@app.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket) -> None:
+    q = await mgr.connect(ws)
+    try:
+        await ws.send_json({"type": "full", "positions": ..., "signals": ...})
+        while True:
+            try:
+                raw = await asyncio.wait_for(q.get(), timeout=2.0)
+            except asyncio.TimeoutError:
+                raw = {"type": "ping", "positions": ..., "signals": ...}
+            await ws.send_json({**raw, "uptime": ..., "clients": mgr.connection_count})
+    except (WebSocketDisconnect, RuntimeError):
+        mgr.disconnect(ws)
+```
+
+> **🤖 Claude 프롬프트 요약 — 페이퍼 트레이딩**
+>
+> *"config에 'PAPER_TRADING' 모드를 추가해서, 이 모드가 켜져 있으면 KIS API로*
+> *실제 주문을 넣는 대신 SQLite DB의 'paper_trades' 테이블에 가상으로 체결 내역을*
+> *기록하도록 기능을 추가해 줘."*
+
+```python
+# data_agent/paper_trade_store.py — 핵심 생성 코드
+class PaperTradeStore:
+    def record(self, symbol: str, signal_type: str,
+               price: float, quantity: int = 1) -> Dict[str, Any]:
+        total_krw = price * quantity
+        self._conn.execute(
+            "INSERT INTO paper_trades (symbol, signal_type, price, quantity, total_krw)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (symbol, signal_type, price, quantity, total_krw),
+        )
+        self._conn.commit()
+        return {"symbol": symbol, "signal_type": signal_type,
+                "price": price, "quantity": quantity, "total_krw": total_krw}
+
+    def get_summary(self) -> Dict[str, Dict[str, Any]]:
+        rows = self._conn.execute("""
+            SELECT symbol,
+                   SUM(CASE WHEN signal_type='BUY' THEN total_krw ELSE 0 END),
+                   SUM(CASE WHEN signal_type IN ('SELL','STOP_LOSS') THEN total_krw ELSE 0 END),
+                   COUNT(*)
+            FROM paper_trades GROUP BY symbol
+        """).fetchall()
+        return {r[0]: {"bought_krw": r[1], "sold_krw": r[2],
+                        "pnl_krw": r[2]-r[1], "trades": r[3]} for r in rows}
+
+# main.py — PAPER_TRADING 모드 연결
+paper_store = PaperTradeStore("data/bot_state.db") if settings.paper_trading else None
+```
 
 > **🤖 Claude 프롬프트 요약 — SQLite 영속성 + 장시간 필터**
 >
@@ -35,9 +147,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 > *(3) 장 시간 필터 — 평일 09:00~15:30에만 매매 로직 동작..."*
 
 ```python
-# data_agent/position_store.py — 핵심 생성 코드
+# data_agent/position_store.py
 class PositionStore:
     def __init__(self, db_path: str = "data/bot_state.db") -> None:
+        if dir_name := os.path.dirname(db_path):
+            os.makedirs(dir_name, exist_ok=True)
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS positions (
@@ -50,66 +164,11 @@ class PositionStore:
 def is_market_open(now: Optional[datetime] = None) -> bool:
     if now is None:
         now = datetime.now()
-    if now.weekday() >= 5:          # 토·일 스킵
+    if now.weekday() >= 5:
         return False
-    market_open  = now.replace(hour=9,  minute=0,  second=0, microsecond=0)
-    market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
-    return market_open <= now <= market_close
-```
-
-> **🤖 Claude 프롬프트 요약 — FastAPI 대시보드**
->
-> *"봇에 경량 웹 서버를 달 거야. api/app.py를 만들고 봇의 현재 상태(DB에 저장된*
-> *포지션, 최근 시그널 등)를 보여주는 대시보드를 루트('/') 경로에 띄워줘. 기존*
-> *스케줄러 루프는 BackgroundTasks 등으로 돌아가게 main.py 진입점을 수정해 줘."*
-
-```python
-# api/app.py — create_app() 팩토리
-def create_app(position_store: PositionStore,
-               signal_log: Deque[Dict[str, Any]]) -> FastAPI:
-    app = FastAPI(title="KimBeggar Dashboard", version="1.0.0")
-
-    @app.get("/", response_class=HTMLResponse)
-    def dashboard() -> str:
-        return _HTML_TEMPLATE.format(
-            uptime=_fmt_uptime(time.time() - _STARTED_AT),
-            positions_html=_positions_table(position_store.get_all()),
-            signals_html=_signals_table(list(signal_log)),
-        )
-
-    @app.get("/api/status")
-    def status() -> Dict[str, Any]:
-        return {"status": "running",
-                "uptime_seconds": round(time.time() - _STARTED_AT, 1),
-                "open_positions": len(position_store.get_all()),
-                "recent_signals": len(signal_log)}
-    return app
-
-# main.py — 데몬 스레드 + uvicorn 기동
-bot_thread = threading.Thread(
-    target=_run_scheduler,
-    args=(settings, KISClient(settings), SignalEngine(settings),
-          NotifierService([KakaoNotifier(settings)]),
-          position_store, signal_log),
-    daemon=True, name="bot-scheduler")
-bot_thread.start()
-uvicorn.run(create_app(position_store, signal_log), host="0.0.0.0", port=8000)
-```
-
-> **🤖 Claude 프롬프트 요약 — CD 파이프라인**
->
-> *"python-app.yml 파일의 마지막 단계에 'Deploy to Render'라는 이름의 CD step을*
-> *추가해 줘. Render Webhook URL을 secrets.RENDER_DEPLOY_HOOK으로 호출하는*
-> *curl 명령어 형태."*
-
-```yaml
-# .github/workflows/python-app.yml — CD 스텝
-- name: Deploy to Render
-  if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-  run: |
-    curl --silent --show-error --fail \
-      "${{ secrets.RENDER_DEPLOY_HOOK }}"
-    echo "✓ Render deploy webhook triggered."
+    return (now.replace(hour=9, minute=0, second=0, microsecond=0)
+            <= now <=
+            now.replace(hour=15, minute=30, second=0, microsecond=0))
 ```
 
 ---
