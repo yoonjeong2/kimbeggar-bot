@@ -7,6 +7,7 @@ no extra dependencies required.
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from typing import Dict, Optional
 
@@ -24,10 +25,13 @@ class PositionStore:
 
     Args:
         db_path: Path to the SQLite database file.  The parent directory
-                 must already exist.  Defaults to ``"data/bot_state.db"``.
+                 is created automatically if it does not exist.
+                 Defaults to ``"data/bot_state.db"``.
     """
 
     def __init__(self, db_path: str = "data/bot_state.db") -> None:
+        if dir_name := os.path.dirname(db_path):
+            os.makedirs(dir_name, exist_ok=True)
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.execute(_CREATE_TABLE)
         self._conn.commit()
