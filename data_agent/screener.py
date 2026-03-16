@@ -1,14 +1,13 @@
 """동적 종목 발굴 (Screener) 모듈.
 
-KIS API의 등락률 순위 및 거래량 순위를 활용해 당일 낙폭이 과대하거나
-거래량이 급증한 종목을 자동으로 발굴합니다.
+당일 낙폭이 과대하거나 거래량이 급증한 종목을 자동으로 발굴합니다.
 
 발굴 전략 (3단계 폴백)
 ----------------------
-1. **낙폭 과대 순위** (1차): KIS 등락률 순위 API → 하락률 상위 N개
+1. **낙폭 과대 순위** (1차): pykrx로 코스피 전 종목 등락률 조회 -> 하락률 상위 N개
    (낙폭 과대 = RSI 과매도 반등 후보)
-2. **거래량 순위** (2차): KIS 거래량 순위 API → 거래대금 상위 N개
-   (API 장애 또는 샌드박스 환경 시)
+2. **거래량 순위** (2차): KIS 거래량 순위 API -> 거래대금 상위 N개
+   (API 장애 또는 pykrx 미설치 시)
 3. **폴백** (3차): KOSPI 시가총액 상위 50 종목에서 랜덤 N개 추출
    + 실시간 가격 조회 (네트워크 없는 테스트 환경 포함)
 
@@ -105,7 +104,7 @@ class ScreenerResult:
         price:       현재가 (KRW).
         change_rate: 전일 대비 등락률 (%, 음수=하락).
         volume:      당일 누적 거래량.
-        source:      발굴 출처 — ``"drop_rank"``, ``"volume_rank"``,
+        source:      발굴 출처 -- ``"drop_rank"``, ``"volume_rank"``,
                      ``"fallback"`` 중 하나.
         discovered_at: 발굴 시각 (ISO 8601 문자열).
     """
@@ -170,6 +169,76 @@ def _parse_ranking_items(
     return results
 
 
+def _pykrx_drop_screener(top_n: int) -> Optional[List[ScreenerResult]]:
+    """pykrx로 당일 코스피 낙폭 과대 종목을 발굴합니다.
+
+    Args:
+        top_n: 반환할 종목 수.
+
+    Returns:
+        ``ScreenerResult`` 리스트. pykrx 미설치 또는 오류 시 ``None``.
+    """
+    try:
+        from pykrx import stock  # type: ignore[import]
+    except ImportError:
+        _logger.debug("pykrx not installed; skipping drop screener")
+        return None
+
+    try:
+        today = datetime.now().strftime("%Y%m%d")
+        df = stock.get_market_ohlcv_by_ticker(today, market="KOSPI")
+        if df is None or df.empty:
+            _logger.debug("pykrx returned empty DataFrame for %s", today)
+            return None
+
+        # 등락률 컬럼명은 '등락률' 또는 '수익률'로 다를 수 있음
+        rate_col = None
+        for col in ["등락률", "수익률", "PER"]:
+            if col in df.columns:
+                rate_col = col
+                break
+        if rate_col is None:
+            _logger.debug("pykrx DataFrame columns: %s", list(df.columns))
+            return None
+
+        # 하락 종목만, 등락률 오름차순 (가장 많이 하락한 순)
+        df_drop = df[df[rate_col] < 0].sort_values(rate_col).head(top_n * 2)
+        if df_drop.empty:
+            return None
+
+        results: List[ScreenerResult] = []
+        for ticker, row in df_drop.iterrows():
+            if len(str(ticker)) != 6:
+                continue
+            try:
+                name = stock.get_market_ticker_name(str(ticker))
+            except Exception:
+                name = ""
+            try:
+                price = float(row.get("종가", row.get("close", 0)) or 0)
+                change_rate = float(row[rate_col])
+                volume = int(float(row.get("거래량", 0) or 0))
+            except (ValueError, TypeError):
+                price, change_rate, volume = 0.0, 0.0, 0
+            results.append(
+                ScreenerResult(
+                    symbol=str(ticker),
+                    name=name or "",
+                    price=price,
+                    change_rate=change_rate,
+                    volume=volume,
+                    source="drop_rank",
+                )
+            )
+            if len(results) >= top_n:
+                break
+
+        return results if results else None
+    except Exception as exc:
+        _logger.warning("pykrx drop screener failed: %s", exc)
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -179,7 +248,7 @@ def get_dynamic_targets(
     kis: "KISClient",
     top_n: int = 5,
 ) -> List[ScreenerResult]:
-    """KIS API로 당일 낙폭 과대 또는 거래량 상위 종목을 동적으로 발굴합니다.
+    """KIS API 또는 pykrx로 당일 낙폭 과대 또는 거래량 상위 종목을 동적으로 발굴합니다.
 
     3단계 폴백 전략을 사용하므로 API 장애나 샌드박스 환경에서도 항상
     ``top_n``개의 종목을 반환합니다.
@@ -190,34 +259,35 @@ def get_dynamic_targets(
 
     Returns:
         :class:`ScreenerResult` 리스트 (최대 ``top_n``개).
-
-    Note:
-        - 낙폭 과대 종목(하락률 순위)을 1순위로 발굴합니다.
-          이는 RSI 과매도 구간에서 반등 가능성이 높기 때문입니다.
-        - KIS 샌드박스(KIS_IS_REAL=false) 환경에서는 순위 API가
-          지원되지 않을 수 있어 폴백 전략이 작동합니다.
     """
-    # ── 1차: 하락률 순위 (낙폭 과대 = RSI 반등 후보) ──────────────────────
-    try:
-        raw = kis.get_fluctuation_ranking(top_n=top_n * 2)
-        results = _parse_ranking_items(raw, source="drop_rank", top_n=top_n)
-        if results:
-            _logger.info(
-                "Screener [하락률순위]: %d개 종목 발굴 — %s",
-                len(results),
-                [r.symbol for r in results],
-            )
-            return results
-    except Exception as exc:
-        _logger.warning("Screener 하락률 순위 API 실패: %s", exc)
+    from data_agent.name_resolver import get_resolver
+    resolver = get_resolver()
 
-    # ── 2차: 거래량 순위 (유동성 높은 활성 종목) ─────────────────────────
+    # -- 1차: pykrx 낙폭 과대 (등락률 기준 하락 상위) ---------------------
+    results = _pykrx_drop_screener(top_n)
+    if results:
+        # 종목명 보완 (pykrx에서 이미 가져왔지만 빈 경우 resolver로 보완)
+        for r in results:
+            if not r.name:
+                r.name = resolver.get_name(r.symbol)
+        _logger.info(
+            "Screener [낙폭과대/pykrx]: %d개 종목 발굴 -- %s",
+            len(results),
+            [r.symbol for r in results],
+        )
+        return results
+
+    # -- 2차: KIS 거래량 순위 (유동성 높은 활성 종목) ---------------------
     try:
         raw = kis.get_volume_ranking(top_n=top_n * 2)
         results = _parse_ranking_items(raw, source="volume_rank", top_n=top_n)
         if results:
+            # 종목명 resolver로 보완
+            for r in results:
+                if not r.name:
+                    r.name = resolver.get_name(r.symbol)
             _logger.info(
-                "Screener [거래량순위]: %d개 종목 발굴 — %s",
+                "Screener [거래량순위/KIS]: %d개 종목 발굴 -- %s",
                 len(results),
                 [r.symbol for r in results],
             )
@@ -225,17 +295,18 @@ def get_dynamic_targets(
     except Exception as exc:
         _logger.warning("Screener 거래량 순위 API 실패: %s", exc)
 
-    # ── 3차 폴백: KOSPI 상위 50에서 랜덤 N개 + 실시간 가격 조회 ───────────
+    # -- 3차 폴백: KOSPI 상위 50에서 랜덤 N개 + 실시간 가격 조회 ----------
     _logger.info("Screener 폴백: KOSPI 상위 50에서 랜덤 %d개 선택", top_n)
     chosen = random.sample(_KOSPI_TOP50, min(top_n, len(_KOSPI_TOP50)))
     fallback_results: List[ScreenerResult] = []
     for sym in chosen:
+        name = resolver.get_name(sym)
         try:
             price_data = kis.get_current_price(sym)
             fallback_results.append(
                 ScreenerResult(
                     symbol=sym,
-                    name="",
+                    name=name,
                     price=float(price_data.get("stck_prpr", 0) or 0),
                     change_rate=float(price_data.get("prdy_ctrt", 0) or 0),
                     volume=int(float(price_data.get("acml_vol", 0) or 0)),
@@ -245,11 +316,11 @@ def get_dynamic_targets(
         except Exception as exc:
             _logger.debug("폴백 가격 조회 실패 (%s): %s", sym, exc)
             fallback_results.append(
-                ScreenerResult(symbol=sym, source="fallback")
+                ScreenerResult(symbol=sym, name=name, source="fallback")
             )
 
     _logger.info(
-        "Screener [폴백]: %d개 종목 발굴 — %s",
+        "Screener [폴백]: %d개 종목 발굴 -- %s",
         len(fallback_results),
         [r.symbol for r in fallback_results],
     )

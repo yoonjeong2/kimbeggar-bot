@@ -37,6 +37,7 @@ from typing import Any, Deque, Dict, List, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
+from data_agent.name_resolver import get_resolver
 from data_agent.position_store import PositionStore
 
 _STARTED_AT: float = time.time()
@@ -304,7 +305,10 @@ _HTML = """\
     return cls ? `<span class="b ${cls}">${lbl}</span>` : t;
   }
 
-  function renderPos(pos) {
+  let _names = {};
+
+  function renderPos(pos, names) {
+    if (names) _names = Object.assign(_names, names);
     const el = document.getElementById("pos-body");
     const rows = Object.entries(pos);
     document.getElementById("st-pos").textContent = rows.length;
@@ -313,15 +317,16 @@ _HTML = """\
       return;
     }
     const body = rows.map(([s, p]) =>
-      `<tr><td><strong>${s}</strong></td><td>${krw(p)}</td></tr>`
+      `<tr><td><strong>${_names[s] || s}</strong></td><td>${krw(p)}</td></tr>`
     ).join("");
     el.innerHTML =
-      `<table><thead><tr><th>종목코드</th><th>진입가</th></tr></thead>` +
+      `<table><thead><tr><th>종목</th><th>진입가</th></tr></thead>` +
       `<tbody>${body}</tbody></table>`;
   }
 
   let _prevSigLen = 0;
-  function renderSig(sigs) {
+  function renderSig(sigs, names) {
+    if (names) _names = Object.assign(_names, names);
     const el = document.getElementById("sig-body");
     document.getElementById("st-sig").textContent = sigs.length;
     if (!sigs.length) {
@@ -333,9 +338,10 @@ _HTML = """\
     const rows = sigs.map((s, i) => {
       const flash = (isNew && i === 0) ? ' class="flash"' : "";
       const rsi   = s.rsi != null ? Number(s.rsi).toFixed(1) : "N/A";
+      const disp  = s.display_name || _names[s.symbol] || s.symbol || "";
       return `<tr${flash}>` +
         `<td>${s.time || ""}</td>` +
-        `<td><strong>${s.symbol || ""}</strong></td>` +
+        `<td><strong>${disp}</strong></td>` +
         `<td>${badge(s.signal_type)}</td>` +
         `<td>${krw(s.price || 0)}</td>` +
         `<td>${rsi}</td>` +
@@ -427,8 +433,8 @@ _HTML = """\
       if (d.uptime)    document.getElementById("uptime").textContent = d.uptime;
       if (d.clients != null)
         document.getElementById("st-cli").textContent = d.clients;
-      if (d.positions != null) renderPos(d.positions);
-      if (d.signals   != null) renderSig(d.signals);
+      if (d.positions != null) renderPos(d.positions, d.names);
+      if (d.signals   != null) renderSig(d.signals,   d.names);
       if (d.screener  != null) renderScr(d.screener);
     };
   }
@@ -461,12 +467,13 @@ def _fmt_uptime(seconds: float) -> str:
 def _ssr_positions(positions: Dict[str, float]) -> str:
     if not positions:
         return _POSITIONS_EMPTY
+    resolver = get_resolver()
     rows = "".join(
-        f"<tr><td><strong>{sym}</strong></td><td>{price:,.0f} 원</td></tr>"
+        f"<tr><td><strong>{resolver.display(sym)}</strong></td><td>{price:,.0f} 원</td></tr>"
         for sym, price in positions.items()
     )
     return (
-        "<table><thead><tr><th>종목코드</th><th>진입가</th></tr></thead>"
+        "<table><thead><tr><th>종목</th><th>진입가</th></tr></thead>"
         f"<tbody>{rows}</tbody></table>"
     )
 
@@ -483,9 +490,12 @@ def _ssr_signals(signals: List[Dict[str, Any]]) -> str:
         lbl = badge_lbl.get(st, st)
         bdg = f'<span class="b {cls}">{lbl}</span>' if cls else st
         rsi = f"{s['rsi']:.1f}" if s.get("rsi") is not None else "N/A"
+        resolver = get_resolver()
+        sym = s.get("symbol", "")
+        display = s.get("display_name") or resolver.display(sym)
         rows.append(
             f"<tr><td>{s.get('time','')}</td>"
-            f"<td><strong>{s.get('symbol','')}</strong></td>"
+            f"<td><strong>{display}</strong></td>"
             f"<td>{bdg}</td>"
             f"<td>{s.get('price', 0):,.0f} 원</td>"
             f"<td>{rsi}</td>"
@@ -624,17 +634,24 @@ def create_app(
         q = await mgr.connect(ws)
         try:
             # ── Initial full-state push ──────────────────────────────────
+            _resolver = get_resolver()
+            _pos = position_store.get_all()
+            _sigs = list(signal_log)
+            _scr = [t.to_dict() if hasattr(t, "to_dict") else t for t in list(_screener)]
+            _all_syms = (
+                list(_pos.keys())
+                + [s.get("symbol", "") for s in _sigs]
+                + [t.get("symbol", "") if isinstance(t, dict) else t.symbol for t in list(_screener)]
+            )
             await ws.send_json(
                 {
                     "type": "full",
                     "uptime": _fmt_uptime(time.time() - _STARTED_AT),
-                    "positions": position_store.get_all(),
-                    "signals": list(signal_log),
+                    "positions": _pos,
+                    "signals": _sigs,
                     "clients": mgr.connection_count,
-                    "screener": [
-                        t.to_dict() if hasattr(t, "to_dict") else t
-                        for t in list(_screener)
-                    ],
+                    "screener": _scr,
+                    "names": _resolver.names_dict(s for s in _all_syms if s),
                 }
             )
 
@@ -650,16 +667,28 @@ def create_app(
                     }
                 except asyncio.TimeoutError:
                     # Idle heartbeat — refresh full state
+                    _hb_pos = position_store.get_all()
+                    _hb_sigs = list(signal_log)
+                    _hb_scr = [
+                        t.to_dict() if hasattr(t, "to_dict") else t
+                        for t in list(_screener)
+                    ]
+                    _hb_syms = (
+                        list(_hb_pos.keys())
+                        + [s.get("symbol", "") for s in _hb_sigs]
+                        + [
+                            t.get("symbol", "") if isinstance(t, dict) else t.symbol
+                            for t in list(_screener)
+                        ]
+                    )
                     payload = {
                         "type": "ping",
                         "uptime": _fmt_uptime(time.time() - _STARTED_AT),
-                        "positions": position_store.get_all(),
-                        "signals": list(signal_log),
+                        "positions": _hb_pos,
+                        "signals": _hb_sigs,
                         "clients": mgr.connection_count,
-                        "screener": [
-                            t.to_dict() if hasattr(t, "to_dict") else t
-                            for t in list(_screener)
-                        ],
+                        "screener": _hb_scr,
+                        "names": get_resolver().names_dict(s for s in _hb_syms if s),
                     }
                 await ws.send_json(payload)
 

@@ -29,6 +29,7 @@ from config.settings import Settings
 from data_agent.kis_api import KISClient
 from data_agent.paper_trade_store import PaperTradeStore
 from data_agent.position_store import PositionStore
+from data_agent.name_resolver import get_resolver
 from data_agent.screener import ScreenerResult, get_dynamic_targets
 from logger.log_setup import setup_logger
 from notifier import NotifierService
@@ -93,6 +94,7 @@ def run_cycle(
         logger.info("Market hours filter — cycle skipped.")
         return
     logger.info("=== Monitoring cycle start ===")
+    resolver = get_resolver()
 
     # ------------------------------------------------------------------
     # Step 1 — Market-level hedge check (KOSPI: 0001 / KOSDAQ: 1001)
@@ -148,7 +150,7 @@ def run_cycle(
 
             logger.info(
                 "%s | %s | price=%.0f | RSI=%s",
-                symbol,
+                resolver.display(symbol),
                 signal.signal_type.value,
                 signal.price,
                 f"{signal.rsi:.1f}" if signal.rsi is not None else "N/A",
@@ -167,13 +169,17 @@ def run_cycle(
                         base_ratio=settings.hedge_ratio,
                     )
                     notifier.send_message(
-                        f"[헤지 권고] {symbol}\n{describe_hedge(ratio)}"
+                        f"[헤지 권고] {resolver.display(symbol)}\n{describe_hedge(ratio)}"
                     )
 
             # 2e. Track entry price when a buy fires
             if signal.signal_type == SignalType.BUY:
                 position_store.set(symbol, signal.price)
-                logger.info("%s: entry price recorded at %.0f", symbol, signal.price)
+                logger.info(
+                    "%s: entry price recorded at %.0f",
+                    resolver.display(symbol),
+                    signal.price,
+                )
 
             # Clear entry price after stop-loss or sell
             if signal.signal_type in (SignalType.STOP_LOSS, SignalType.SELL):
@@ -187,6 +193,7 @@ def run_cycle(
                     {
                         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "symbol": signal.symbol,
+                        "display_name": resolver.display(signal.symbol),
                         "signal_type": signal.signal_type.value,
                         "price": signal.price,
                         "rsi": (
