@@ -33,6 +33,8 @@ Example:
 
 from __future__ import annotations
 
+from typing import List
+
 # Contribution of each 1 % below long MA to the hedge ratio (percentage points)
 MA_DEVIATION_SCALE: float = 5.0
 
@@ -87,6 +89,84 @@ def calculate_hedge_ratio(
     # --- 3. Combine and clamp -------------------------------------------
     ratio = base_ratio + ma_risk + index_risk
     return round(min(max(ratio, MIN_RATIO), MAX_RATIO), 4)
+
+
+def predict_volatility(returns: List[float]) -> float:
+    """Predict next-period volatility using a scikit-learn LinearRegression model.
+
+    This function is a **TODO stub** for Phase 6 (ML 기반 동적 헤지).
+    The intent is to replace the fixed ``MA_DEVIATION_SCALE`` / ``INDEX_DROP_SCALE``
+    multipliers in :func:`calculate_hedge_ratio` with a data-driven volatility
+    forecast that feeds directly into the hedge ratio.
+
+    Planned implementation
+    ----------------------
+    1. Feature engineering — sliding-window statistics derived from ``returns``:
+       - Mean return over the last N bars
+       - Realised volatility (std-dev of returns) over the last N bars
+       - Trend indicator (slope of a linear fit over the last N bars)
+
+    2. Model — ``sklearn.linear_model.LinearRegression`` trained offline on
+       historical data; the fitted model would be serialised with ``joblib``
+       and loaded at startup.
+
+    3. Output — annualised volatility forecast used as a scalar adjustment to
+       the hedge ratio::
+
+           ratio += predict_volatility(recent_returns) * VOLATILITY_SCALE
+
+    Example (illustrative — model not yet trained):
+
+    .. code-block:: python
+
+        # TODO: replace stub with a fitted model loaded from disk
+        # import joblib
+        # _model = joblib.load("models/volatility_lr.pkl")
+
+        import numpy as np
+        from sklearn.linear_model import LinearRegression
+
+        def predict_volatility(returns: List[float]) -> float:
+            n = len(returns)
+            X = np.arange(n).reshape(-1, 1)
+            y = np.array(returns)
+            lr = LinearRegression().fit(X, y)       # trend line
+            residuals = y - lr.predict(X)
+            realised_vol = float(np.std(residuals))  # annualise as needed
+            return realised_vol * (252 ** 0.5)       # daily → annual
+
+    Args:
+        returns: List of daily log-returns (most recent last), e.g.
+                 ``[(close_t / close_{t-1}) - 1 for ...]``.
+                 Recommended length: 20–60 bars.
+
+    Returns:
+        Predicted annualised volatility as a decimal (e.g. ``0.25`` = 25 %).
+        Returns ``0.0`` until a trained model is available.
+
+    Note:
+        ``scikit-learn`` must be installed (``pip install scikit-learn``).
+        The dependency is listed in ``requirements.txt`` but the model weights
+        file (``models/volatility_lr.pkl``) is not yet generated.
+        See Phase 6 in ``PROGRESS.md`` for the implementation timeline.
+    """
+    # TODO (Phase 6): load a pre-trained model and return its prediction.
+    #
+    #   import numpy as np
+    #   from sklearn.linear_model import LinearRegression
+    #
+    #   n = len(returns)
+    #   if n < 5:
+    #       return 0.0
+    #   X = np.arange(n).reshape(-1, 1)
+    #   y = np.array(returns, dtype=float)
+    #   lr = LinearRegression().fit(X, y)
+    #   residuals = y - lr.predict(X)
+    #   daily_vol = float(np.std(residuals, ddof=1))
+    #   return daily_vol * (252 ** 0.5)   # annualise
+
+    _ = returns  # suppress "unused argument" linter warning until implemented
+    return 0.0   # stub: no adjustment until model is trained
 
 
 def describe_hedge(ratio: float) -> str:

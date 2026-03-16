@@ -10,6 +10,9 @@ uvicorn[standard]>=0.29.0  # ASGI server for FastAPI
 pytest>=7.4.0           # test runner (also in requirements-dev.txt)
 pytest-cov>=4.1.0       # coverage reporting
 
+# scikit-learn: used by strategy/hedge_logic.py predict_volatility() (Phase 6 ML hedge).
+scikit-learn>=1.4.0
+
 # TA-Lib: high-performance C-based indicator library.
 # Installation varies by environment:
 #   pip    : pip install TA-Lib  (requires pre-built C library on the system)

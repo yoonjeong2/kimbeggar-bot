@@ -47,6 +47,31 @@ KimBeggar는 **"절대 잃지 않는"** 원칙을 자동화한 국내 주식 헤
 
 알림 채널은 **카카오톡 "나에게 보내기"** 를 기본으로 제공하며, Observer 패턴 기반 구조로 텔레그램·슬랙 등을 코어 코드 수정 없이 추가할 수 있습니다.
 
+### 국제 시장 확장 로드맵 — Phase 6: Alpaca API 연동
+
+KimBeggar의 다음 단계는 **국내 KIS API → 글로벌 Alpaca API**로의 데이터 에이전트 확장입니다.
+동일한 전략 엔진(RSI + MA 크로스오버 + 동적 헤지)을 미국 주식·ETF에 그대로 적용할 수 있습니다.
+
+| Phase | 범위 | 핵심 변경 |
+|---|---|---|
+| Phase 1–5 | 국내 KIS API | 현재 구현 완료 |
+| **Phase 6** | **Alpaca API (미국장)** | `data_agent/alpaca_api.py` 신규 작성 |
+| Phase 7 | 멀티 브로커 통합 | `KISClient` / `AlpacaClient` 공통 인터페이스 추상화 |
+
+```python
+# Phase 6 목표 코드 — main.py 변경 없이 브로커 교체
+from data_agent.alpaca_api import AlpacaClient   # ← 이 줄만 교체
+
+kis    = KISClient(settings)    # 현재: 한국 KIS
+alpaca = AlpacaClient(settings) # Phase 6: 미국 Alpaca
+```
+
+**Alpaca API 선택 이유:**
+- REST + WebSocket 동시 지원 → 실시간 시세 수신 가능
+- Paper Trading 계정 무료 제공 → 실제 자금 없이 전략 검증
+- `APCA-API-KEY-ID` / `APCA-API-SECRET-KEY` 2개 키만으로 인증
+- `alpaca-trade-api-python` 공식 SDK 제공 (MIT 라이선스)
+
 ---
 
 ## 2. 기존 봇과의 차이점
@@ -56,21 +81,38 @@ KimBeggar는 **"절대 잃지 않는"** 원칙을 자동화한 국내 주식 헤
 | 항목 | 일반 알림 봇 | **KimBeggar** |
 |---|---|---|
 | **헤지 전략** | 단순 가격 알림만 제공 | **실시간 인버스 ETF 헤지 비율 자동 산출** (MA 이탈 + 지수 급락 복합 반영) |
+| **ML 기반 동적 헤지** | 없음 | **scikit-learn LinearRegression으로 변동성 예측** → 헤지 비율을 시장 상황에 맞게 동적 조정 (Phase 6 구현 예정) |
 | **알림 채널 확장** | 단일 채널 하드코딩 | **Observer 패턴** — `BaseNotifier` ABC 구현으로 카카오·텔레그램·슬랙 코어 수정 없이 추가 가능 |
 | **신호 우선순위** | 단순 조건 판별 | **4단계 우선순위 체계** (STOP_LOSS > SELL > BUY > HOLD) |
 | **에러 복구** | 예외 시 중단 | **Tenacity 재시도** (지수 백오프, 최대 3회) + **에러 발생 시 카카오 알림** |
 | **백테스팅** | 없음 | **backtrader 기반 과거 데이터 전략 검증** |
 | **테스트 커버리지** | 없음 / 미흡 | **92% 커버리지** (165개 pytest 유닛·통합 테스트) |
 | **CI/CD** | 없음 | **GitHub Actions**: black 포맷 + flake8 + pylint + pytest + Docker 빌드 자동화 |
+| **국제 시장** | 국내 전용 | **Phase 6 Alpaca API 연동** — 미국 주식·ETF에 동일 전략 적용 예정 |
 
 ```
 기존 봇: 조건 감지 → 알림 전송
                   ↑ 여기서 끝
 
 KimBeggar:
-  지수 급락 감지 → 동적 헤지 비율 계산 → 인버스 ETF 권고량 산출 → 알림
+  지수 급락 감지 → [ML 변동성 예측] → 동적 헤지 비율 계산 → 인버스 ETF 권고량 산출 → 알림
   주식 신호 감지 → 우선순위 판단 → 에러 시 복구·재시도 → 알림
   백테스트로 전략 사전 검증 가능
+  (Phase 6) KIS API ↔ Alpaca API 브로커 교체 — 전략 코드 변경 없음
+```
+
+### ML 기반 동적 헤지란?
+
+헤지 비율을 **고정 공식**이 아닌 **학습된 변동성 예측값**으로 조정하는 방식입니다.
+`strategy/hedge_logic.py`의 `predict_volatility()` 함수(TODO)가 이를 담당합니다.
+
+```
+현재 방식: 헤지 비율 = base_ratio + MA이탈분 + 지수급락분  (규칙 기반)
+ML 방식:   헤지 비율 = base_ratio + ML예측_변동성  (데이터 기반)
+                              ↑
+              scikit-learn LinearRegression
+              입력: 과거 N일 수익률, ATR, 거래량 변화율
+              출력: 다음 봉 예상 변동성 (annualized)
 ```
 
 ---
@@ -653,7 +695,75 @@ main.py                     →   코드 수정 없이 KISClient → UpbitClient
 
 ---
 
-## 18. 기여 가이드 (Contributing)
+## 18. 호환성 (Compatibility)
+
+### TA-Lib 설치
+
+TA-Lib은 C 확장 라이브러리로, 플랫폼별로 추가 설치 단계가 필요합니다.
+설치에 실패하면 자동으로 순수 pandas/NumPy 구현으로 폴백됩니다.
+
+#### macOS
+
+```bash
+# Homebrew로 C 라이브러리 먼저 설치
+brew install ta-lib
+
+# 그 다음 Python 바인딩 설치
+pip install ta-lib
+```
+
+> Homebrew가 없다면: [brew.sh](https://brew.sh) 참조
+
+#### Windows
+
+```bash
+# 방법 1 — 사전 컴파일된 wheel 사용 (권장)
+pip install --no-binary :all: ta-lib
+
+# 방법 2 — Christoph Gohlke의 비공식 wheel
+# https://www.lfd.uci.edu/~gohlke/pythonlibs/#ta-lib
+# 예시 (Python 3.11, 64-bit):
+pip install TA_Lib-0.4.28-cp311-cp311-win_amd64.whl
+```
+
+> Visual C++ Build Tools가 필요한 경우:
+> [Microsoft Build Tools 2022](https://visualstudio.microsoft.com/visual-cpp-build-tools/) 다운로드
+
+#### Linux (Ubuntu/Debian)
+
+```bash
+# C 라이브러리 소스 빌드
+wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
+tar -xzf ta-lib-0.4.0-src.tar.gz
+cd ta-lib && ./configure --prefix=/usr && make && sudo make install
+
+# Python 바인딩
+pip install ta-lib
+```
+
+#### TA-Lib 없이 실행 (폴백 모드)
+
+TA-Lib이 설치되지 않은 환경에서도 모든 기능이 동작합니다.
+`strategy/indicators.py`가 자동으로 pandas/NumPy 구현으로 전환됩니다.
+
+```python
+# 설치 여부 확인
+python -c "import talib; print('TA-Lib OK:', talib.__version__)"
+# ImportError → 폴백 모드로 자동 전환
+```
+
+#### Python 버전별 지원 현황
+
+| Python | TA-Lib wheel | 폴백 pandas |
+|--------|-------------|------------|
+| 3.9    | ✅           | ✅          |
+| 3.10   | ✅           | ✅          |
+| 3.11   | ✅           | ✅          |
+| 3.12   | ✅ (0.4.28+) | ✅          |
+
+---
+
+## 19. 기여 가이드 (Contributing)
 
 KimBeggar는 오픈소스 프로젝트입니다. 개선 아이디어나 버그 리포트를 환영합니다!
 
