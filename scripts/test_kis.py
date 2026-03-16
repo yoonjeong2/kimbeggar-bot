@@ -26,7 +26,7 @@ def _ssl_verify() -> bool:
 
 APP_KEY = os.getenv("KIS_APP_KEY", "")
 APP_SECRET = os.getenv("KIS_APP_SECRET", "")
-IS_REAL = os.getenv("KIS_IS_REAL", "false").strip().lower() == "true"
+IS_REAL = os.getenv("KIS_IS_REAL", "true").strip().lower() == "true"
 BASE_URL = (
     "https://openapi.koreainvestment.com:9443"
     if IS_REAL

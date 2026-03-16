@@ -22,7 +22,7 @@ def _make_settings() -> MagicMock:
     s = MagicMock()
     s.kis_app_key = "test_key"
     s.kis_app_secret = "test_secret"
-    s.kis_base_url = "https://openapivts.koreainvestment.com:29443"
+    s.kis_base_url = "https://openapi.koreainvestment.com:9443"
     return s
 
 

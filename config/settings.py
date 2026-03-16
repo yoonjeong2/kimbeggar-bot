@@ -55,7 +55,7 @@ class Settings:
         default_factory=lambda: os.getenv("KIS_ACCOUNT_PRODUCT_CODE", "01")
     )
     kis_is_real: bool = field(
-        default_factory=lambda: os.getenv("KIS_IS_REAL", "false").lower() == "true"
+        default_factory=lambda: os.getenv("KIS_IS_REAL", "true").lower() == "true"
     )
 
     # --- Kakao ---------------------------------------------------------
@@ -115,7 +115,7 @@ class Settings:
         self.kis_app_key = os.getenv("KIS_APP_KEY", self.kis_app_key)
         self.kis_app_secret = os.getenv("KIS_APP_SECRET", self.kis_app_secret)
         self.kis_account_no = os.getenv("KIS_ACCOUNT_NO", self.kis_account_no)
-        self.kis_is_real = os.getenv("KIS_IS_REAL", "false").lower() == "true"
+        self.kis_is_real = os.getenv("KIS_IS_REAL", "true").lower() == "true"
         self.kakao_rest_api_key = os.getenv(
             "KAKAO_REST_API_KEY", self.kakao_rest_api_key
         )
