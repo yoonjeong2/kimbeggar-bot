@@ -123,7 +123,7 @@ _HTML = """\
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>KimBeggar Dashboard</title>
+  <title>김거지 퀀텀점프</title>
   <style>
     :root {
       --primary: #1e293b; --accent: #3b82f6;
@@ -223,13 +223,26 @@ _HTML = """\
     @media (max-width: 800px) { .scr-section { padding: 0 16px 20px; } }
     .up   { color: #15803d; font-weight: 600; }
     .down { color: #b91c1c; font-weight: 600; }
+
+    /* ── Screener table: 열 너비 고정으로 헤더-내용 줄맞춤 보장 ── */
+    .scr-tbl { table-layout: fixed; width: 100%; }
+    .scr-tbl col.c-sym  { width: 12%; }
+    .scr-tbl col.c-name { width: 22%; }
+    .scr-tbl col.c-px   { width: 14%; }
+    .scr-tbl col.c-cr   { width: 10%; }
+    .scr-tbl col.c-vol  { width: 16%; }
+    .scr-tbl col.c-src  { width: 10%; }
+    .scr-tbl col.c-time { width: 16%; }
+    .scr-tbl td, .scr-tbl th {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
   </style>
 </head>
 <body>
 
 <!-- ── Header ── -->
 <header class="hdr">
-  <span class="hdr-title">KimBeggar Dashboard</span>
+  <span class="hdr-title">김거지 퀀텀점프</span>
   <div class="hdr-meta">
     <span>가동: <strong id="uptime">__UPTIME__</strong></span>
     <span class="dot" id="dot"></span>
@@ -388,8 +401,13 @@ _HTML = """\
         <td style="color:var(--muted);font-size:.78rem">${t.discovered_at || ""}</td>
       </tr>`;
     }).join("");
+    const cols =
+      `<colgroup>` +
+      `<col class="c-sym"><col class="c-name"><col class="c-px">` +
+      `<col class="c-cr"><col class="c-vol"><col class="c-src"><col class="c-time">` +
+      `</colgroup>`;
     el.innerHTML =
-      `<table><thead><tr>` +
+      `<table class="scr-tbl">${cols}<thead><tr>` +
       `<th>종목코드</th><th>종목명</th><th>현재가</th>` +
       `<th>등락률</th><th>거래량</th><th>출처</th><th>발굴시각</th>` +
       `</tr></thead><tbody>${rows}</tbody></table>`;
@@ -538,8 +556,14 @@ def _ssr_screener(targets: List[Dict[str, Any]]) -> str:
             f"<td style='color:var(--muted);font-size:.78rem'>"
             f"{t.get('discovered_at','')}</td></tr>"
         )
+    cols = (
+        "<colgroup>"
+        "<col class='c-sym'><col class='c-name'><col class='c-px'>"
+        "<col class='c-cr'><col class='c-vol'><col class='c-src'><col class='c-time'>"
+        "</colgroup>"
+    )
     header = (
-        "<table><thead><tr>"
+        f"<table class='scr-tbl'>{cols}<thead><tr>"
         "<th>종목코드</th><th>종목명</th><th>현재가</th>"
         "<th>등락률</th><th>거래량</th><th>출처</th><th>발굴시각</th>"
         "</tr></thead><tbody>"

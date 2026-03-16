@@ -62,7 +62,7 @@ class TestDashboardHTML:
 
     def test_contains_title(self, client):
         resp = client.get("/")
-        assert "KimBeggar" in resp.text
+        assert "퀀텀점프" in resp.text
 
     def test_shows_no_position_message_when_empty(self, client):
         resp = client.get("/")
