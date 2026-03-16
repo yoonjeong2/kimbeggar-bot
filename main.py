@@ -24,7 +24,7 @@ from typing import Any, Deque, Dict, Optional
 import schedule
 import uvicorn
 
-from api.app import create_app
+from api.app import ConnectionManager, create_app
 from config.settings import Settings
 from data_agent.kis_api import KISClient
 from data_agent.position_store import PositionStore
@@ -42,6 +42,7 @@ def run_cycle(
     notifier: NotifierService,
     position_store: PositionStore,
     signal_log: Optional[Deque[Dict[str, Any]]] = None,
+    broadcaster: Optional[ConnectionManager] = None,
 ) -> None:
     """Execute one full monitoring cycle across all watched symbols.
 
@@ -58,6 +59,7 @@ def run_cycle(
        d. Send notification for any non-HOLD signal.
        e. Persist entry price to SQLite when a BUY signal fires.
        f. Append signal metadata to ``signal_log`` for the web dashboard.
+       g. Broadcast updated state to all connected WebSocket clients.
 
     Args:
         settings:        Application ``Settings`` instance.
@@ -68,6 +70,8 @@ def run_cycle(
                          persistent entry-price tracking across restarts.
         signal_log:      Optional deque shared with the web dashboard; receives
                          a dict summary for every non-HOLD signal detected.
+        broadcaster:     Optional :class:`~api.app.ConnectionManager` used to
+                         push real-time updates to connected WebSocket clients.
     """
     logger = logging.getLogger(__name__)
     if not is_market_open():
@@ -173,6 +177,16 @@ def run_cycle(
                     }
                 )
 
+                # 2g. Broadcast real-time update to all WebSocket clients
+                if broadcaster is not None:
+                    broadcaster.broadcast_threadsafe(
+                        {
+                            "type": "update",
+                            "positions": position_store.get_all(),
+                            "signals": list(signal_log),
+                        }
+                    )
+
         except Exception as exc:
             logger.error("Error processing symbol %s: %s", symbol, exc)
             notifier.send_error(f"[{symbol}] Error processing symbol: {exc}")
@@ -187,13 +201,14 @@ def _run_scheduler(
     notifier: NotifierService,
     position_store: PositionStore,
     signal_log: Deque[Dict[str, Any]],
+    broadcaster: Optional[ConnectionManager] = None,
 ) -> None:
     """Blocking scheduler loop — runs inside a daemon thread."""
     schedule.every(settings.monitor_interval_minutes).minutes.do(
-        run_cycle, settings, kis, engine, notifier, position_store, signal_log
+        run_cycle, settings, kis, engine, notifier, position_store, signal_log, broadcaster
     )
     # Fire once immediately so the first output is not delayed
-    run_cycle(settings, kis, engine, notifier, position_store, signal_log)
+    run_cycle(settings, kis, engine, notifier, position_store, signal_log, broadcaster)
 
     logger = logging.getLogger(__name__)
     logger.info(
@@ -228,6 +243,7 @@ def main() -> None:
     # Shared state between bot loop and web dashboard
     position_store = PositionStore("data/bot_state.db")
     signal_log: Deque[Dict[str, Any]] = deque(maxlen=50)
+    ws_manager = ConnectionManager()
 
     # Start the scheduler loop in a background daemon thread
     bot_thread = threading.Thread(
@@ -239,6 +255,7 @@ def main() -> None:
             NotifierService([KakaoNotifier(settings)]),
             position_store,
             signal_log,
+            ws_manager,
         ),
         daemon=True,
         name="bot-scheduler",
@@ -247,7 +264,7 @@ def main() -> None:
     logger.info("Bot scheduler thread started (daemon).")
 
     # Build the FastAPI app and serve it on the main thread
-    app = create_app(position_store, signal_log)
+    app = create_app(position_store, signal_log, ws_manager)
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
 
