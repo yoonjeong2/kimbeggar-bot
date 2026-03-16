@@ -328,51 +328,33 @@
 
 ---
 
-## 10. 변경 로그 (Changelog)
+## 10. 변경 로그 및 개발 타임라인
 
-### [2026-03-13] — 초기 개발 완료
+> **이 섹션은 [`PROGRESS.md`](../PROGRESS.md)로 통합되었습니다.**
+>
+> Phase별 상세 타임라인(날짜, 주요 작업, AI 프롬프트 요약, 활용 비율)과
+> 전체 변경 이력은 아래 파일에서 관리됩니다:
+>
+> - **[`PROGRESS.md`](../PROGRESS.md)** — Phase 1~5 타임라인, AI 도구 활용 통계, Backlog
+> - **[`CHANGELOG.md`](../CHANGELOG.md)** — Keep-a-Changelog 형식 버전별 변경 이력
+>   (각 릴리스에 Claude 프롬프트 요약 + 핵심 코드 스니펫 포함)
 
-#### Added
-- `config/ssl.py` — 환경별 SSL 검증 공통 헬퍼
-- `notifier/base.py` — `BaseNotifier` ABC + `NotifierService` (Observer 패턴)
-- `strategy/hedge_logic.py` — 동적 헤지 비율 계산 모듈
-- `tests/conftest.py` — pytest 공용 fixture
-- `tests/test_strategy.py` — strategy 모듈 단위 테스트 58개
-- `.github/workflows/python-app.yml` — GitHub Actions CI/CD
-- `requirements-dev.txt` — 개발 전용 의존성
-- `setup.cfg` — flake8/pytest 통합 설정
-- `.gitignore` — 보안 파일 제외 설정
-- `README.md` — 프로젝트 문서
+### 빠른 참조
 
-#### Changed
-- `strategy/indicators.py` — 모든 TODO 제거, `ta` 라이브러리로 완전 구현
-- `strategy/signal.py` — `SignalEngine` 전체 메서드 구현 (스켈레톤 → 실제 로직)
-- `main.py` — `run_cycle()` 완전 구현
-- `data_agent/kis_api.py` — 모든 TODO 구현 + tenacity 재시도 + PEP 484 타입힌팅
-- `notifier/kakao.py` — `BaseNotifier` 상속, tenacity 적용, Google Docstring
-- `notifier/kakao_token_manager.py` — tenacity 적용, 중복 import 정리, Google Docstring
-- `config/settings.py` — `dev_mode` 프로퍼티 추가, Google Docstring
-- `requirements.txt` — `tenacity>=8.2.0`, `ta>=0.10.0` 추가
-
-#### Fixed
-- `notifier/kakao_token_manager.py` — `import os` 중복 선언 제거
-- `strategy/kakao_auth_setup.py` — `verify=False` 하드코딩 → `ssl_verify()` 조건부 처리
-- 테스트: RSI 워밍업 오프셋 수정 (`[:14]` → `[:13]`), V/A자 크로스 시리즈로 교체
-
-#### Security
-- 모든 `requests` 호출의 `verify=False` 하드코딩 제거
-- `config/ssl.py`로 SSL 검증 중앙화 — `DEV_MODE=false` 한 줄로 운영 TLS 복원
-- `.gitignore`에 `.env`, `kakao_token.json`, `venv/`, `logs/` 추가
+| 문서 | 내용 | 경로 |
+|---|---|---|
+| PROGRESS.md | Phase 타임라인, AI 활용 비율, Backlog | `../PROGRESS.md` |
+| CHANGELOG.md | 버전별 Added/Changed/Fixed + 프롬프트 | `../CHANGELOG.md` |
 
 ---
 
-### 🔲 Phase 5 — 향후 과제 (Backlog)
+### Phase 완료 현황
 
-| 항목 | 우선순위 | 비고 |
+| Phase | 상태 | 핵심 산출물 |
 |---|---|---|
-| `strategy/indicators.py` — 변동성 기반 포지션 사이징 | 중 | Kelly criterion 검토 |
-| `strategy/signal.py` — 백테스트 모드 추가 | 중 | 과거 OHLCV로 시그널 검증 |
-| `notifier/telegram.py` — 텔레그램 채널 추가 | 저 | `BaseNotifier` 구현만으로 가능 |
-| `data_agent/kis_api.py` — 웹소켓 실시간 시세 | 저 | KIS WebSocket API 검토 |
-| 진입가 영속성 — JSON / SQLite 저장 | 중 | 현재 인메모리(재시작 시 초기화) |
-| `main.py` — 장 시작/마감 시간 필터 | 중 | 09:00~15:20 외 사이클 스킵 |
+| Phase 1 — 인프라 & API 연동 | ✅ 완료 | KIS API, Kakao OAuth, 전역 설정, 로거 |
+| Phase 2 — 코드 품질 고도화 | ✅ 완료 | 타입힌팅, Observer 패턴, tenacity |
+| Phase 3 — 핵심 트레이딩 로직 | ✅ 완료 | SignalEngine, 지표, 헤지 비율 |
+| Phase 4 — 테스트 & CI/CD | ✅ 완료 | 185 tests, 92 % coverage, Docker CI |
+| Phase 5 — 고도화 | ✅ 완료 | SQLite, 장시간 필터, FastAPI, Render CD |
+| Phase 6 — 향후 과제 | 🔲 백로그 | 웹소켓, 포지션 사이징, 텔레그램 |
