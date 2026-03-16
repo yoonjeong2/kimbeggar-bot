@@ -355,13 +355,13 @@ _HTML = """\
   }
 
   const BADGE = {
-    BUY:               ["b-long",  "\u{1F680} LONG"],
-    SELL:              ["b-liq",   "\u{1F4A5} LIQUIDATE"],
-    STOP_LOSS:         ["b-liq",   "\u{1F4A5} LIQUIDATE"],
-    HEDGE:             ["b-hedge", "\u{1F6E1} HEDGE"],
-    LEV_ENTRY:         ["b-long",  "\u{1F680} LONG"],
-    LEV_EXIT:          ["b-liq",   "\u{1F4A5} EXIT"],
-    LEV_PARTIAL_EXIT:  ["b-liq",   "\u{1F4B0} PARTIAL"],
+    BUY:               ["b-long",  "\\u{1F680} LONG"],
+    SELL:              ["b-liq",   "\\u{1F4A5} LIQUIDATE"],
+    STOP_LOSS:         ["b-liq",   "\\u{1F4A5} LIQUIDATE"],
+    HEDGE:             ["b-hedge", "\\u{1F6E1} HEDGE"],
+    LEV_ENTRY:         ["b-long",  "\\u{1F680} LONG"],
+    LEV_EXIT:          ["b-liq",   "\\u{1F4A5} EXIT"],
+    LEV_PARTIAL_EXIT:  ["b-liq",   "\\u{1F4B0} PARTIAL"],
     LEV_ADD_OPTIONS:   ["b-surge", "\u26A1 ADD OPT"],
   };
 
