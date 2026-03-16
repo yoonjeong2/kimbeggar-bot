@@ -236,7 +236,7 @@ class KISClient:
         data = self._request(
             method="GET",
             path=_INDEX_PATH,
-            tr_id="FHPUP03500100",
+            tr_id="FHPUP02100000",
             params={
                 "FID_COND_MRKT_DIV_CODE": "U",
                 "FID_INPUT_ISCD": index_code,
@@ -247,6 +247,58 @@ class KISClient:
                 f"KIS index response for code {index_code!r} is missing 'output' key: {data}"
             )
         return data["output"]
+
+    def simulate_trade(
+        self,
+        symbol: str,
+        signal_type: str,
+        price: float,
+        quantity: int = 1,
+    ) -> Dict[str, Any]:
+        """Simulate a trade order for demo / DEV_MODE purposes.
+
+        When ``Settings.dev_mode`` is ``True`` this method logs the intended
+        order and returns a mock response **without** sending any real order to
+        KIS.  It is intended for local testing and CI pipelines where live API
+        credentials are not available.
+
+        Args:
+            symbol:      6-digit KRX stock code (e.g. ``"005930"``).
+            signal_type: Signal that triggered the trade (e.g. ``"BUY"``,
+                         ``"SELL"``, ``"STOP_LOSS"``).
+            price:       Execution price in KRW.
+            quantity:    Number of shares (default: 1).
+
+        Returns:
+            Mock order response dictionary with keys ``symbol``, ``signal_type``,
+            ``price``, ``quantity``, ``total_krw``, and ``simulated``.
+
+        Raises:
+            RuntimeError: If called when ``dev_mode`` is ``False``.
+        """
+        if not self._settings.dev_mode:
+            raise RuntimeError(
+                "simulate_trade() is only available when DEV_MODE=true. "
+                "Use the real KIS order API for live trading."
+            )
+
+        total_krw: float = price * quantity
+        self._logger.info(
+            "[DEV_MODE] SIMULATED %s | symbol=%s | price=%.0f | qty=%d | total=%.0f KRW",
+            signal_type,
+            symbol,
+            price,
+            quantity,
+            total_krw,
+        )
+        return {
+            "symbol": symbol,
+            "signal_type": signal_type,
+            "price": price,
+            "quantity": quantity,
+            "total_krw": total_krw,
+            "simulated": True,
+        }
 
     # ------------------------------------------------------------------
     # Internal helpers
