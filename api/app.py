@@ -123,130 +123,179 @@ _HTML = """\
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>김거지 퀀텀점프</title>
+  <title>&#x26A1; 김거지 퀀텀점프</title>
   <style>
     :root {
-      --primary: #1e293b; --accent: #3b82f6;
-      --ok: #22c55e;  --warn: #f59e0b; --danger: #ef4444;
-      --bg: #f1f5f9;  --card: #fff;   --border: #e2e8f0;
-      --text: #0f172a; --muted: #64748b; --r: 10px;
+      --bg: #0a0f1e; --card: #0d1424; --primary: #070d1a;
+      --border: #1a2f4a; --text: #cbd5e1; --muted: #4b6080;
+      --neon-g: #10b981; --neon-r: #ef4444; --neon-c: #06b6d4;
+      --warn: #f59e0b; --r: 6px;
+      --glow-g: 0 0 10px rgba(16,185,129,.4);
+      --glow-r: 0 0 10px rgba(239,68,68,.4);
+      --glow-c: 0 0 10px rgba(6,182,212,.3);
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-           background: var(--bg); color: var(--text); min-height: 100vh; }
+    body {
+      font-family: "SF Mono","Fira Code","Cascadia Code","Segoe UI",monospace;
+      background: var(--bg); color: var(--text); min-height: 100vh;
+    }
 
     /* ── Header ── */
-    .hdr { background: var(--primary); color: #fff; padding: 14px 24px;
-           display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-    .hdr-title { font-size: 1.15rem; font-weight: 700; flex: 1; }
-    .hdr-meta  { display: flex; align-items: center; gap: 10px;
-                 font-size: .82rem; color: #94a3b8; flex-wrap: wrap; }
-    .hdr-meta strong { color: #e2e8f0; }
+    .hdr {
+      background: var(--primary);
+      border-bottom: 1px solid var(--neon-g);
+      box-shadow: 0 2px 24px rgba(16,185,129,.12);
+      color: #fff; padding: 14px 24px;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .hdr-title {
+      font-size: 1.05rem; font-weight: 700; flex: 1;
+      color: var(--neon-g); letter-spacing: .07em; text-transform: uppercase;
+      text-shadow: var(--glow-g);
+    }
+    .hdr-title .dim { color: #1e3a5f; font-size: .72rem; margin-left: 10px;
+                      font-weight: 400; text-shadow: none; letter-spacing: .04em; }
+    .hdr-meta { display: flex; align-items: center; gap: 10px;
+                font-size: .76rem; color: var(--muted); flex-wrap: wrap; }
+    .hdr-meta strong { color: #94a3b8; font-family: monospace; }
 
-    /* ── WS status dot ── */
-    .dot { width: 9px; height: 9px; border-radius: 50%;
-           background: #475569; display: inline-block; flex-shrink: 0;
+    /* ── WS dot ── */
+    .dot { width: 8px; height: 8px; border-radius: 50%;
+           background: #1e3a5f; display: inline-block; flex-shrink: 0;
            transition: background .4s; }
-    .dot.live  { background: var(--ok);   animation: pulse 2s infinite; }
-    .dot.error { background: var(--danger); }
-    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.35; } }
+    .dot.live  { background: var(--neon-g); box-shadow: var(--glow-g);
+                 animation: pulse 2s infinite; }
+    .dot.error { background: var(--neon-r); box-shadow: var(--glow-r); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
 
-    /* ── Stats row ── */
-    .stats { display: grid;
-             grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-             gap: 12px; padding: 20px 24px 0; }
-    .stat { background: var(--card); border-radius: var(--r);
-            padding: 16px 12px; text-align: center;
-            box-shadow: 0 1px 3px rgba(0,0,0,.07); }
-    .stat-val { font-size: 1.65rem; font-weight: 700; color: var(--accent);
-                line-height: 1.2; }
-    .stat-lbl { font-size: .72rem; color: var(--muted); margin-top: 3px;
-                text-transform: uppercase; letter-spacing: .04em; }
+    /* ── Stats ── */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 10px; padding: 16px 24px 0;
+    }
+    .stat {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-top: 2px solid var(--neon-g);
+      border-radius: var(--r); padding: 14px 12px; text-align: center;
+    }
+    .stat-val {
+      font-size: 1.7rem; font-weight: 700; color: var(--neon-g);
+      line-height: 1.2; text-shadow: var(--glow-g); font-family: monospace;
+    }
+    .stat-lbl {
+      font-size: .62rem; color: var(--muted); margin-top: 4px;
+      text-transform: uppercase; letter-spacing: .1em;
+    }
 
     /* ── Main grid ── */
-    .grid { display: grid;
-            grid-template-columns: 280px 1fr;
-            gap: 20px; padding: 20px 24px; }
+    .grid {
+      display: grid; grid-template-columns: 260px 1fr;
+      gap: 14px; padding: 14px 24px;
+    }
     @media (max-width: 800px) {
-      .grid { grid-template-columns: 1fr; padding: 16px; }
-      .stats { padding: 16px 16px 0; }
-      .hdr  { padding: 12px 16px; }
+      .grid  { grid-template-columns: 1fr; padding: 10px; }
+      .stats { padding: 10px 10px 0; }
+      .hdr   { padding: 12px 16px; }
     }
 
     /* ── Card ── */
-    .card { background: var(--card); border-radius: var(--r);
-            box-shadow: 0 1px 3px rgba(0,0,0,.07); overflow: hidden; }
-    .card-hdr { padding: 11px 16px; border-bottom: 1px solid var(--border);
-                font-weight: 600; font-size: .88rem; background: #f8fafc;
-                display: flex; align-items: center; gap: 8px; }
-    .card-hdr .sub { font-weight: 400; color: var(--muted); font-size: .77rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--r); overflow: hidden;
+    }
+    .card-hdr {
+      padding: 10px 16px; border-bottom: 1px solid var(--border);
+      font-weight: 700; font-size: .8rem;
+      background: rgba(16,185,129,.05);
+      color: var(--neon-g); letter-spacing: .05em; text-transform: uppercase;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card-hdr .sub { font-weight: 400; color: var(--muted);
+                     font-size: .7rem; text-transform: none; letter-spacing: 0; }
     .card-body { overflow-x: auto; }
 
     /* ── Tables ── */
-    table { border-collapse: collapse; width: 100%; font-size: .855rem; }
-    th { background: #f8fafc; font-weight: 600; color: var(--muted);
-         font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; }
-    th, td { padding: 9px 14px; border-bottom: 1px solid var(--border);
+    table { border-collapse: collapse; width: 100%; font-size: .81rem; }
+    th {
+      background: rgba(16,185,129,.06);
+      font-weight: 700; color: var(--neon-g);
+      font-size: .66rem; text-transform: uppercase; letter-spacing: .08em;
+    }
+    th, td { padding: 8px 14px; border-bottom: 1px solid var(--border);
              white-space: nowrap; }
     tr:last-child td { border-bottom: none; }
-    tbody tr:hover { background: #f8fafc; }
+    tbody tr:hover { background: rgba(16,185,129,.04); }
+    td strong { color: var(--text); }
 
     /* ── Badges ── */
-    .b { display: inline-flex; align-items: center;
-         padding: 2px 9px; border-radius: 99px;
-         font-size: .75rem; font-weight: 600; line-height: 1.7; }
-    .b-buy  { background: #dcfce7; color: #15803d; }
-    .b-sell { background: #fee2e2; color: #b91c1c; }
-    .b-stop { background: #fef9c3; color: #92400e; }
-    .b-hedge{ background: #e0f2fe; color: #0369a1; }
-    .b-drop { background: #fee2e2; color: #b91c1c; }
-    .b-vol  { background: #fef9c3; color: #92400e; }
-    .b-fb   { background: #f1f5f9; color: #475569; }
+    .b {
+      display: inline-flex; align-items: center;
+      padding: 2px 8px; border-radius: 3px;
+      font-size: .68rem; font-weight: 700; line-height: 1.8;
+      letter-spacing: .05em;
+    }
+    .b-long  { background: rgba(16,185,129,.15); color: var(--neon-g);
+               box-shadow: var(--glow-g); border: 1px solid var(--neon-g); }
+    .b-liq   { background: rgba(239,68,68,.15);  color: var(--neon-r);
+               box-shadow: var(--glow-r); border: 1px solid var(--neon-r); }
+    .b-hedge { background: rgba(6,182,212,.12);  color: var(--neon-c);
+               border: 1px solid rgba(6,182,212,.5); }
+    .b-dip   { background: rgba(239,68,68,.1);   color: #f87171;
+               border: 1px solid #7f1d1d; }
+    .b-surge { background: rgba(245,158,11,.1);  color: #fbbf24;
+               border: 1px solid #78350f; }
+    .b-scan  { background: rgba(75,96,128,.12);  color: var(--muted);
+               border: 1px solid #1e3a5f; }
 
     /* ── Empty ── */
-    .empty { padding: 36px 16px; text-align: center;
-             color: var(--muted); font-size: .88rem; }
+    .empty {
+      padding: 28px 16px; text-align: center;
+      color: var(--muted); font-size: .8rem; font-style: italic;
+    }
+    .empty::before { content: "// "; color: #1e3a5f; }
 
     /* ── Reason cell ── */
     td.rsn { max-width: 200px; overflow: hidden;
-             text-overflow: ellipsis; color: var(--muted); font-size: .8rem; }
+             text-overflow: ellipsis; color: var(--muted); font-size: .76rem; }
 
-    /* ── Flash animation for new row ── */
-    .flash { animation: rowflash .9s ease-out; }
+    /* ── Flash ── */
+    .flash { animation: rowflash 1s ease-out; }
     @keyframes rowflash {
-      0%   { background: #dbeafe; }
+      0%   { background: rgba(16,185,129,.18); }
       100% { background: transparent; }
     }
 
     /* ── Screener section ── */
     .scr-section { padding: 0 24px 24px; }
-    @media (max-width: 800px) { .scr-section { padding: 0 16px 20px; } }
-    .up   { color: #15803d; font-weight: 600; }
-    .down { color: #b91c1c; font-weight: 600; }
+    @media (max-width: 800px) { .scr-section { padding: 0 10px 16px; } }
+    .up   { color: var(--neon-g); font-weight: 700; }
+    .down { color: var(--neon-r); font-weight: 700; }
 
-    /* ── Screener table: 열 너비 고정으로 헤더-내용 줄맞춤 보장 ── */
-    .scr-tbl { table-layout: fixed; width: 100%; }
-    .scr-tbl col.c-sym  { width: 12%; }
-    .scr-tbl col.c-name { width: 22%; }
-    .scr-tbl col.c-px   { width: 14%; }
-    .scr-tbl col.c-cr   { width: 10%; }
-    .scr-tbl col.c-vol  { width: 16%; }
-    .scr-tbl col.c-src  { width: 10%; }
-    .scr-tbl col.c-time { width: 16%; }
-    .scr-tbl td, .scr-tbl th {
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
+    /* ── Screener table ── */
+    .scr-tbl { table-layout: auto; width: 100%; }
+    .scr-tbl th, .scr-tbl td { white-space: nowrap; }
+    .scr-tbl th:nth-child(1), .scr-tbl td:nth-child(1) { min-width: 80px; }
+    .scr-tbl th:nth-child(2), .scr-tbl td:nth-child(2) { min-width: 140px; max-width: 220px;
+      overflow: hidden; text-overflow: ellipsis; }
+    .scr-tbl th:nth-child(3), .scr-tbl td:nth-child(3) { min-width: 110px; }
+    .scr-tbl th:nth-child(4), .scr-tbl td:nth-child(4) { min-width: 80px;  }
+    .scr-tbl th:nth-child(5), .scr-tbl td:nth-child(5) { min-width: 100px; }
+    .scr-tbl th:nth-child(6), .scr-tbl td:nth-child(6) { min-width: 90px;  }
+    .scr-tbl th:nth-child(7), .scr-tbl td:nth-child(7) { min-width: 110px; }
   </style>
 </head>
 <body>
 
 <!-- ── Header ── -->
 <header class="hdr">
-  <span class="hdr-title">김거지 퀀텀점프</span>
+  <span class="hdr-title">&#x26A1; 김거지 퀀텀점프<span class="dim">// QUANTUM JUMP BOT v2</span></span>
   <div class="hdr-meta">
-    <span>가동: <strong id="uptime">__UPTIME__</strong></span>
+    <span>UPTIME <strong id="uptime">__UPTIME__</strong></span>
     <span class="dot" id="dot"></span>
-    <span id="ws-lbl">연결 중…</span>
+    <span id="ws-lbl">CONNECTING...</span>
   </div>
 </header>
 
@@ -254,19 +303,19 @@ _HTML = """\
 <div class="stats">
   <div class="stat">
     <div class="stat-val" id="st-pos">0</div>
-    <div class="stat-lbl">오픈 포지션</div>
+    <div class="stat-lbl">Leverage Pos</div>
   </div>
   <div class="stat">
     <div class="stat-val" id="st-sig">0</div>
-    <div class="stat-lbl">최근 시그널</div>
+    <div class="stat-lbl">Quantum Hits</div>
   </div>
   <div class="stat">
-    <div class="stat-val" id="st-cli">—</div>
-    <div class="stat-lbl">WS 클라이언트</div>
+    <div class="stat-val" id="st-cli">&#x2014;</div>
+    <div class="stat-lbl">Live Feeds</div>
   </div>
   <div class="stat">
     <div class="stat-val" id="st-scr">0</div>
-    <div class="stat-lbl">스크리너 탐색</div>
+    <div class="stat-lbl">Prey Found</div>
   </div>
 </div>
 
@@ -274,13 +323,13 @@ _HTML = """\
 <main class="grid">
 
   <div class="card">
-    <div class="card-hdr">오픈 포지션</div>
+    <div class="card-hdr">&#x1F525; 레버리지 포지션 (3X)</div>
     <div class="card-body" id="pos-body">__POSITIONS__</div>
   </div>
 
   <div class="card">
     <div class="card-hdr">
-      최근 시그널
+      &#x26A1; 퀀텀 타격 로그
       <span class="sub">(최대 50건)</span>
     </div>
     <div class="card-body" id="sig-body">__SIGNALS__</div>
@@ -292,7 +341,7 @@ _HTML = """\
 <section class="scr-section">
   <div class="card">
     <div class="card-hdr">
-      자동 탐색 종목 (스크리너)
+      &#x1F3AF; 과매도 사냥감 (Deep Dive)
       <span class="sub" id="scr-updated"></span>
     </div>
     <div class="card-body" id="scr-body">__SCREENER__</div>
@@ -301,21 +350,24 @@ _HTML = """\
 
 <script>
 (function () {
-  // ── render helpers ──────────────────────────────────────────────────
   function krw(n) {
-    return Number(n).toLocaleString("ko-KR") + " 원";
+    return Number(n).toLocaleString("ko-KR") + " \u20a9";
   }
 
   const BADGE = {
-    BUY:       ["b-buy",  "매수"],
-    SELL:      ["b-sell", "매도"],
-    STOP_LOSS: ["b-stop", "손절"],
-    HEDGE:     ["b-hedge","헤지"],
+    BUY:               ["b-long",  "\u{1F680} LONG"],
+    SELL:              ["b-liq",   "\u{1F4A5} LIQUIDATE"],
+    STOP_LOSS:         ["b-liq",   "\u{1F4A5} LIQUIDATE"],
+    HEDGE:             ["b-hedge", "\u{1F6E1} HEDGE"],
+    LEV_ENTRY:         ["b-long",  "\u{1F680} LONG"],
+    LEV_EXIT:          ["b-liq",   "\u{1F4A5} EXIT"],
+    LEV_PARTIAL_EXIT:  ["b-liq",   "\u{1F4B0} PARTIAL"],
+    LEV_ADD_OPTIONS:   ["b-surge", "\u26A1 ADD OPT"],
   };
 
   function badge(t) {
-    const [cls, lbl] = BADGE[t] || ["", t];
-    return cls ? `<span class="b ${cls}">${lbl}</span>` : t;
+    const [cls, lbl] = BADGE[t] || ["b-scan", t || "—"];
+    return `<span class="b ${cls}">${lbl}</span>`;
   }
 
   let _names = {};
@@ -326,14 +378,15 @@ _HTML = """\
     const rows = Object.entries(pos);
     document.getElementById("st-pos").textContent = rows.length;
     if (!rows.length) {
-      el.innerHTML = '<div class="empty">보유 포지션 없음</div>';
+      el.innerHTML = '<div class="empty">\uB300\uAE30 \uC911: \uB2E4\uC74C \uD3ED\uB77D(Dip)\uC744 \uAE30\uB2E4\uB9AC\uBA70 \uB9C8\uC9C4 \uC7A5\uC804 \uC644\uB8CC</div>';
       return;
     }
     const body = rows.map(([s, p]) =>
-      `<tr><td><strong>${_names[s] || s}</strong></td><td>${krw(p)}</td></tr>`
+      `<tr><td><strong>${_names[s] || s}</strong></td>` +
+      `<td style="font-family:monospace">${krw(p)}</td></tr>`
     ).join("");
     el.innerHTML =
-      `<table><thead><tr><th>종목</th><th>진입가</th></tr></thead>` +
+      `<table><thead><tr><th>Asset</th><th>Entry</th></tr></thead>` +
       `<tbody>${body}</tbody></table>`;
   }
 
@@ -343,39 +396,39 @@ _HTML = """\
     const el = document.getElementById("sig-body");
     document.getElementById("st-sig").textContent = sigs.length;
     if (!sigs.length) {
-      el.innerHTML = '<div class="empty">아직 기록된 시그널 없음</div>';
+      el.innerHTML = '<div class="empty">\uC2E0\uD638 \uC5C6\uC74C \u2014 \uC2DC\uC7A5\uC774 \uC544\uC9C1 \uCDA9\uBD84\uD788 \uBB34\uB108\uC9C0\uC9C0 \uC54A\uC558\uB2E4</div>';
       _prevSigLen = 0;
       return;
     }
     const isNew = sigs.length > _prevSigLen && _prevSigLen > 0;
     const rows = sigs.map((s, i) => {
       const flash = (isNew && i === 0) ? ' class="flash"' : "";
-      const rsi   = s.rsi != null ? Number(s.rsi).toFixed(1) : "N/A";
+      const rsi   = s.rsi != null ? Number(s.rsi).toFixed(1) : "\u2014";
       const disp  = s.display_name || _names[s.symbol] || s.symbol || "";
       return `<tr${flash}>` +
-        `<td>${s.time || ""}</td>` +
+        `<td style="color:var(--muted);font-size:.72rem">${s.time || ""}</td>` +
         `<td><strong>${disp}</strong></td>` +
         `<td>${badge(s.signal_type)}</td>` +
-        `<td>${krw(s.price || 0)}</td>` +
-        `<td>${rsi}</td>` +
+        `<td style="font-family:monospace">${krw(s.price || 0)}</td>` +
+        `<td style="font-family:monospace;color:var(--neon-c)">${rsi}</td>` +
         `<td class="rsn" title="${s.reason || ""}">${s.reason || ""}</td>` +
         `</tr>`;
     }).join("");
     el.innerHTML =
       `<table><thead><tr>` +
-      `<th>시각</th><th>종목</th><th>시그널</th>` +
-      `<th>가격</th><th>RSI</th><th>사유</th>` +
+      `<th>Time</th><th>Target</th><th>Action</th>` +
+      `<th>Exec Price</th><th>RSI</th><th>Trigger</th>` +
       `</tr></thead><tbody>${rows}</tbody></table>`;
     _prevSigLen = sigs.length;
   }
 
   const SCR_SRC = {
-    drop_rank:   ["b-drop", "낙폭과대"],
-    volume_rank: ["b-vol",  "거래량"],
-    fallback:    ["b-fb",   "폴백"],
+    drop_rank:   ["b-dip",   "\uD83E\uDE78 DIPPED"],
+    volume_rank: ["b-surge", "\u26A1 SURGE"],
+    fallback:    ["b-scan",  "\uD83D\uDCE1 SCAN"],
   };
   function scrBadge(src) {
-    const [cls, lbl] = SCR_SRC[src] || ["b-fb", src];
+    const [cls, lbl] = SCR_SRC[src] || ["b-scan", src];
     return `<span class="b ${cls}">${lbl}</span>`;
   }
   function renderScr(items) {
@@ -383,39 +436,34 @@ _HTML = """\
     const cnt = document.getElementById("st-scr");
     if (cnt) cnt.textContent = items.length;
     if (!items || !items.length) {
-      el.innerHTML = '<div class="empty">탐색된 종목 없음 (장 마감 또는 API 대기 중)</div>';
+      el.innerHTML = '<div class="empty">\uC0AC\uB0E5\uAC10 \uC5C6\uC74C \u2014 \uC7A5 \uB9C8\uAC10 \uB610\uB294 \uBA39\uC774\uAC00 \uB3C4\uB9DD\uAC14\uB2E4</div>';
       return;
     }
     const rows = items.map(t => {
       const cr = Number(t.change_rate);
       const crCls = cr > 0 ? "up" : cr < 0 ? "down" : "";
       const crStr = (cr >= 0 ? "+" : "") + cr.toFixed(2) + "%";
-      const vol = t.volume ? Number(t.volume).toLocaleString("ko-KR") : "-";
-      return `<tr>
-        <td><strong>${t.symbol}</strong></td>
-        <td>${t.name || "-"}</td>
-        <td>${t.price ? Number(t.price).toLocaleString("ko-KR") + " 원" : "-"}</td>
-        <td class="${crCls}">${crStr}</td>
-        <td style="color:var(--muted);font-size:.8rem">${vol}</td>
-        <td>${scrBadge(t.source)}</td>
-        <td style="color:var(--muted);font-size:.78rem">${t.discovered_at || ""}</td>
-      </tr>`;
+      const vol = t.volume ? Number(t.volume).toLocaleString("ko-KR") : "\u2014";
+      return `<tr>` +
+        `<td><strong>${t.symbol}</strong></td>` +
+        `<td>${t.name || "\u2014"}</td>` +
+        `<td style="font-family:monospace">${t.price ? Number(t.price).toLocaleString("ko-KR") + " \u20a9" : "\u2014"}</td>` +
+        `<td class="${crCls}" style="font-family:monospace;font-weight:700">${crStr}</td>` +
+        `<td style="color:var(--muted);font-size:.75rem;font-family:monospace">${vol}</td>` +
+        `<td>${scrBadge(t.source)}</td>` +
+        `<td style="color:var(--muted);font-size:.72rem">${t.discovered_at || ""}</td>` +
+        `</tr>`;
     }).join("");
-    const cols =
-      `<colgroup>` +
-      `<col class="c-sym"><col class="c-name"><col class="c-px">` +
-      `<col class="c-cr"><col class="c-vol"><col class="c-src"><col class="c-time">` +
-      `</colgroup>`;
     el.innerHTML =
-      `<table class="scr-tbl">${cols}<thead><tr>` +
-      `<th>종목코드</th><th>종목명</th><th>현재가</th>` +
-      `<th>등락률</th><th>거래량</th><th>출처</th><th>발굴시각</th>` +
+      `<table class="scr-tbl"><thead><tr>` +
+      `<th>Code</th><th>Asset</th><th>Price</th>` +
+      `<th>Move</th><th>Volume</th><th>Source</th><th>Found At</th>` +
       `</tr></thead><tbody>${rows}</tbody></table>`;
     const upd = document.getElementById("scr-updated");
-    if (upd) upd.textContent = "갱신: " + new Date().toLocaleTimeString("ko-KR");
+    if (upd) upd.textContent = "SCAN: " + new Date().toLocaleTimeString("ko-KR");
   }
 
-  // ── WebSocket ──────────────────────────────────────────────────────
+  // ── WebSocket ────────────────────────────────────────────────────
   let retryMs = 1_000;
   const MAX_MS = 30_000;
 
@@ -427,22 +475,22 @@ _HTML = """\
 
     ws.onopen = () => {
       dot.className = "dot live";
-      lbl.textContent = "실시간 연결됨";
-      lbl.style.color  = "#22c55e";
+      lbl.textContent = "FEED LIVE";
+      lbl.style.color  = "#10b981";
       retryMs = 1_000;
     };
 
     ws.onclose = () => {
       dot.className = "dot";
-      lbl.textContent = `재연결 중… (${(retryMs / 1000).toFixed(0)}s)`;
-      lbl.style.color  = "#94a3b8";
+      lbl.textContent = `RECONNECTING... (${(retryMs / 1000).toFixed(0)}s)`;
+      lbl.style.color  = "#4b6080";
       setTimeout(connect, retryMs);
       retryMs = Math.min(retryMs * 2, MAX_MS);
     };
 
     ws.onerror = () => {
       dot.className = "dot error";
-      lbl.textContent = "연결 오류";
+      lbl.textContent = "FEED LOST";
       lbl.style.color  = "#ef4444";
     };
 
@@ -465,9 +513,9 @@ _HTML = """\
 </html>
 """
 
-_POSITIONS_EMPTY = '<div class="empty">보유 포지션 없음</div>'
-_SIGNALS_EMPTY = '<div class="empty">아직 기록된 시그널 없음</div>'
-_SCREENER_EMPTY = '<div class="empty">탐색된 종목 없음 (장 마감 또는 API 대기 중)</div>'
+_POSITIONS_EMPTY = '<div class="empty">대기 중: 다음 폭락(Dip)을 기다리며 마진 장전 완료</div>'
+_SIGNALS_EMPTY = '<div class="empty">신호 없음 — 시장이 아직 충분히 무너지지 않았다</div>'
+_SCREENER_EMPTY = '<div class="empty">사냥감 없음 — 장 마감 또는 먹이가 도망갔다</div>'
 
 
 # ---------------------------------------------------------------------------
@@ -487,11 +535,12 @@ def _ssr_positions(positions: Dict[str, float]) -> str:
         return _POSITIONS_EMPTY
     resolver = get_resolver()
     rows = "".join(
-        f"<tr><td><strong>{resolver.display(sym)}</strong></td><td>{price:,.0f} 원</td></tr>"
+        f"<tr><td><strong>{resolver.display(sym)}</strong></td>"
+        f"<td style='font-family:monospace'>{price:,.0f} &#x20a9;</td></tr>"
         for sym, price in positions.items()
     )
     return (
-        "<table><thead><tr><th>종목</th><th>진입가</th></tr></thead>"
+        "<table><thead><tr><th>Asset</th><th>Entry</th></tr></thead>"
         f"<tbody>{rows}</tbody></table>"
     )
 
@@ -499,30 +548,40 @@ def _ssr_positions(positions: Dict[str, float]) -> str:
 def _ssr_signals(signals: List[Dict[str, Any]]) -> str:
     if not signals:
         return _SIGNALS_EMPTY
-    badge_cls = {"BUY": "b-buy", "SELL": "b-sell", "STOP_LOSS": "b-stop", "HEDGE": "b-hedge"}
-    badge_lbl = {"BUY": "매수", "SELL": "매도", "STOP_LOSS": "손절", "HEDGE": "헤지"}
+    badge_cls = {
+        "BUY": "b-long", "SELL": "b-liq", "STOP_LOSS": "b-liq", "HEDGE": "b-hedge",
+        "LEV_ENTRY": "b-long", "LEV_EXIT": "b-liq",
+        "LEV_PARTIAL_EXIT": "b-liq", "LEV_ADD_OPTIONS": "b-surge",
+    }
+    badge_lbl = {
+        "BUY": "&#x1F680; LONG", "SELL": "&#x1F4A5; LIQUIDATE",
+        "STOP_LOSS": "&#x1F4A5; LIQUIDATE", "HEDGE": "&#x1F6E1; HEDGE",
+        "LEV_ENTRY": "&#x1F680; LONG", "LEV_EXIT": "&#x1F4A5; EXIT",
+        "LEV_PARTIAL_EXIT": "&#x1F4B0; PARTIAL", "LEV_ADD_OPTIONS": "&#x26A1; ADD OPT",
+    }
     rows = []
+    resolver = get_resolver()
     for s in signals:
         st = s.get("signal_type", "")
-        cls = badge_cls.get(st, "")
+        cls = badge_cls.get(st, "b-scan")
         lbl = badge_lbl.get(st, st)
-        bdg = f'<span class="b {cls}">{lbl}</span>' if cls else st
-        rsi = f"{s['rsi']:.1f}" if s.get("rsi") is not None else "N/A"
-        resolver = get_resolver()
+        bdg = f'<span class="b {cls}">{lbl}</span>'
+        rsi = f"{s['rsi']:.1f}" if s.get("rsi") is not None else "&#x2014;"
         sym = s.get("symbol", "")
         display = s.get("display_name") or resolver.display(sym)
         rows.append(
-            f"<tr><td>{s.get('time','')}</td>"
+            f"<tr>"
+            f"<td style='color:var(--muted);font-size:.72rem'>{s.get('time','')}</td>"
             f"<td><strong>{display}</strong></td>"
             f"<td>{bdg}</td>"
-            f"<td>{s.get('price', 0):,.0f} 원</td>"
-            f"<td>{rsi}</td>"
+            f"<td style='font-family:monospace'>{s.get('price', 0):,.0f} &#x20a9;</td>"
+            f"<td style='font-family:monospace;color:var(--neon-c)'>{rsi}</td>"
             f"<td class='rsn'>{s.get('reason','')}</td></tr>"
         )
     header = (
         "<table><thead><tr>"
-        "<th>시각</th><th>종목</th><th>시그널</th>"
-        "<th>가격</th><th>RSI</th><th>사유</th>"
+        "<th>Time</th><th>Target</th><th>Action</th>"
+        "<th>Exec Price</th><th>RSI</th><th>Trigger</th>"
         "</tr></thead><tbody>"
     )
     return header + "".join(rows) + "</tbody></table>"
@@ -531,41 +590,39 @@ def _ssr_signals(signals: List[Dict[str, Any]]) -> str:
 def _ssr_screener(targets: List[Dict[str, Any]]) -> str:
     if not targets:
         return _SCREENER_EMPTY
-    src_lbl = {"drop_rank": "낙폭과대", "volume_rank": "거래량", "fallback": "폴백"}
-    src_cls = {"drop_rank": "b-drop", "volume_rank": "b-vol", "fallback": "b-fb"}
+    src_lbl = {
+        "drop_rank": "&#x1FA78; DIPPED",
+        "volume_rank": "&#x26A1; SURGE",
+        "fallback": "&#x1F4E1; SCAN",
+    }
+    src_cls = {"drop_rank": "b-dip", "volume_rank": "b-surge", "fallback": "b-scan"}
     rows = []
     for t in targets:
         cr = float(t.get("change_rate", 0))
         cr_cls = "up" if cr > 0 else ("down" if cr < 0 else "")
         cr_str = f"{'+'if cr>=0 else ''}{cr:.2f}%"
         vol = t.get("volume", 0)
-        vol_str = f"{int(vol):,}" if vol else "-"
+        vol_str = f"{int(vol):,}" if vol else "&#x2014;"
         src = t.get("source", "")
         bdg = (
-            f'<span class="b {src_cls.get(src, "b-fb")}">'
+            f'<span class="b {src_cls.get(src, "b-scan")}">'
             f'{src_lbl.get(src, src)}</span>'
         )
         rows.append(
             f"<tr>"
             f"<td><strong>{t.get('symbol','')}</strong></td>"
-            f"<td>{t.get('name','') or '-'}</td>"
-            f"<td>{t.get('price',0):,.0f} 원</td>"
-            f"<td class='{cr_cls}'>{cr_str}</td>"
-            f"<td style='color:var(--muted);font-size:.8rem'>{vol_str}</td>"
+            f"<td>{t.get('name','') or '&#x2014;'}</td>"
+            f"<td style='font-family:monospace'>{t.get('price',0):,.0f} &#x20a9;</td>"
+            f"<td class='{cr_cls}' style='font-family:monospace;font-weight:700'>{cr_str}</td>"
+            f"<td style='color:var(--muted);font-size:.75rem;font-family:monospace'>{vol_str}</td>"
             f"<td>{bdg}</td>"
-            f"<td style='color:var(--muted);font-size:.78rem'>"
+            f"<td style='color:var(--muted);font-size:.72rem'>"
             f"{t.get('discovered_at','')}</td></tr>"
         )
-    cols = (
-        "<colgroup>"
-        "<col class='c-sym'><col class='c-name'><col class='c-px'>"
-        "<col class='c-cr'><col class='c-vol'><col class='c-src'><col class='c-time'>"
-        "</colgroup>"
-    )
     header = (
-        f"<table class='scr-tbl'>{cols}<thead><tr>"
-        "<th>종목코드</th><th>종목명</th><th>현재가</th>"
-        "<th>등락률</th><th>거래량</th><th>출처</th><th>발굴시각</th>"
+        "<table class='scr-tbl'><thead><tr>"
+        "<th>Code</th><th>Asset</th><th>Price</th>"
+        "<th>Move</th><th>Volume</th><th>Source</th><th>Found At</th>"
         "</tr></thead><tbody>"
     )
     return header + "".join(rows) + "</tbody></table>"
@@ -599,7 +656,7 @@ def create_app(
     mgr = ws_manager if ws_manager is not None else ConnectionManager()
     _screener: List = screener_targets if screener_targets is not None else []
 
-    app = FastAPI(title="KimBeggar Dashboard", version="1.0.0")
+    app = FastAPI(title="김거지 퀀텀점프", version="2.0.0")
 
     @app.on_event("startup")
     async def _capture_loop() -> None:
