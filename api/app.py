@@ -198,6 +198,9 @@ _HTML = """\
     .b-sell { background: #fee2e2; color: #b91c1c; }
     .b-stop { background: #fef9c3; color: #92400e; }
     .b-hedge{ background: #e0f2fe; color: #0369a1; }
+    .b-drop { background: #fee2e2; color: #b91c1c; }
+    .b-vol  { background: #fef9c3; color: #92400e; }
+    .b-fb   { background: #f1f5f9; color: #475569; }
 
     /* ── Empty ── */
     .empty { padding: 36px 16px; text-align: center;
@@ -213,6 +216,12 @@ _HTML = """\
       0%   { background: #dbeafe; }
       100% { background: transparent; }
     }
+
+    /* ── Screener section ── */
+    .scr-section { padding: 0 24px 24px; }
+    @media (max-width: 800px) { .scr-section { padding: 0 16px 20px; } }
+    .up   { color: #15803d; font-weight: 600; }
+    .down { color: #b91c1c; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -241,6 +250,10 @@ _HTML = """\
     <div class="stat-val" id="st-cli">—</div>
     <div class="stat-lbl">WS 클라이언트</div>
   </div>
+  <div class="stat">
+    <div class="stat-val" id="st-scr">0</div>
+    <div class="stat-lbl">스크리너 탐색</div>
+  </div>
 </div>
 
 <!-- ── Main ── -->
@@ -260,6 +273,17 @@ _HTML = """\
   </div>
 
 </main>
+
+<!-- ── Screener ── -->
+<section class="scr-section">
+  <div class="card">
+    <div class="card-hdr">
+      자동 탐색 종목 (스크리너)
+      <span class="sub" id="scr-updated"></span>
+    </div>
+    <div class="card-body" id="scr-body">__SCREENER__</div>
+  </div>
+</section>
 
 <script>
 (function () {
@@ -326,6 +350,47 @@ _HTML = """\
     _prevSigLen = sigs.length;
   }
 
+  const SCR_SRC = {
+    drop_rank:   ["b-drop", "낙폭과대"],
+    volume_rank: ["b-vol",  "거래량"],
+    fallback:    ["b-fb",   "폴백"],
+  };
+  function scrBadge(src) {
+    const [cls, lbl] = SCR_SRC[src] || ["b-fb", src];
+    return `<span class="b ${cls}">${lbl}</span>`;
+  }
+  function renderScr(items) {
+    const el = document.getElementById("scr-body");
+    const cnt = document.getElementById("st-scr");
+    if (cnt) cnt.textContent = items.length;
+    if (!items || !items.length) {
+      el.innerHTML = '<div class="empty">탐색된 종목 없음 (장 마감 또는 API 대기 중)</div>';
+      return;
+    }
+    const rows = items.map(t => {
+      const cr = Number(t.change_rate);
+      const crCls = cr > 0 ? "up" : cr < 0 ? "down" : "";
+      const crStr = (cr >= 0 ? "+" : "") + cr.toFixed(2) + "%";
+      const vol = t.volume ? Number(t.volume).toLocaleString("ko-KR") : "-";
+      return `<tr>
+        <td><strong>${t.symbol}</strong></td>
+        <td>${t.name || "-"}</td>
+        <td>${t.price ? Number(t.price).toLocaleString("ko-KR") + " 원" : "-"}</td>
+        <td class="${crCls}">${crStr}</td>
+        <td style="color:var(--muted);font-size:.8rem">${vol}</td>
+        <td>${scrBadge(t.source)}</td>
+        <td style="color:var(--muted);font-size:.78rem">${t.discovered_at || ""}</td>
+      </tr>`;
+    }).join("");
+    el.innerHTML =
+      `<table><thead><tr>` +
+      `<th>종목코드</th><th>종목명</th><th>현재가</th>` +
+      `<th>등락률</th><th>거래량</th><th>출처</th><th>발굴시각</th>` +
+      `</tr></thead><tbody>${rows}</tbody></table>`;
+    const upd = document.getElementById("scr-updated");
+    if (upd) upd.textContent = "갱신: " + new Date().toLocaleTimeString("ko-KR");
+  }
+
   // ── WebSocket ──────────────────────────────────────────────────────
   let retryMs = 1_000;
   const MAX_MS = 30_000;
@@ -364,6 +429,7 @@ _HTML = """\
         document.getElementById("st-cli").textContent = d.clients;
       if (d.positions != null) renderPos(d.positions);
       if (d.signals   != null) renderSig(d.signals);
+      if (d.screener  != null) renderScr(d.screener);
     };
   }
 
@@ -377,6 +443,7 @@ _HTML = """\
 
 _POSITIONS_EMPTY = '<div class="empty">보유 포지션 없음</div>'
 _SIGNALS_EMPTY = '<div class="empty">아직 기록된 시그널 없음</div>'
+_SCREENER_EMPTY = '<div class="empty">탐색된 종목 없음 (장 마감 또는 API 대기 중)</div>'
 
 
 # ---------------------------------------------------------------------------
@@ -433,6 +500,43 @@ def _ssr_signals(signals: List[Dict[str, Any]]) -> str:
     return header + "".join(rows) + "</tbody></table>"
 
 
+def _ssr_screener(targets: List[Dict[str, Any]]) -> str:
+    if not targets:
+        return _SCREENER_EMPTY
+    src_lbl = {"drop_rank": "낙폭과대", "volume_rank": "거래량", "fallback": "폴백"}
+    src_cls = {"drop_rank": "b-drop", "volume_rank": "b-vol", "fallback": "b-fb"}
+    rows = []
+    for t in targets:
+        cr = float(t.get("change_rate", 0))
+        cr_cls = "up" if cr > 0 else ("down" if cr < 0 else "")
+        cr_str = f"{'+'if cr>=0 else ''}{cr:.2f}%"
+        vol = t.get("volume", 0)
+        vol_str = f"{int(vol):,}" if vol else "-"
+        src = t.get("source", "")
+        bdg = (
+            f'<span class="b {src_cls.get(src, "b-fb")}">'
+            f'{src_lbl.get(src, src)}</span>'
+        )
+        rows.append(
+            f"<tr>"
+            f"<td><strong>{t.get('symbol','')}</strong></td>"
+            f"<td>{t.get('name','') or '-'}</td>"
+            f"<td>{t.get('price',0):,.0f} 원</td>"
+            f"<td class='{cr_cls}'>{cr_str}</td>"
+            f"<td style='color:var(--muted);font-size:.8rem'>{vol_str}</td>"
+            f"<td>{bdg}</td>"
+            f"<td style='color:var(--muted);font-size:.78rem'>"
+            f"{t.get('discovered_at','')}</td></tr>"
+        )
+    header = (
+        "<table><thead><tr>"
+        "<th>종목코드</th><th>종목명</th><th>현재가</th>"
+        "<th>등락률</th><th>거래량</th><th>출처</th><th>발굴시각</th>"
+        "</tr></thead><tbody>"
+    )
+    return header + "".join(rows) + "</tbody></table>"
+
+
 # ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
@@ -442,19 +546,24 @@ def create_app(
     position_store: PositionStore,
     signal_log: Deque[Dict[str, Any]],
     ws_manager: Optional[ConnectionManager] = None,
+    screener_targets: Optional[List] = None,
 ) -> FastAPI:
     """Return a configured FastAPI application.
 
     Args:
-        position_store: SQLite-backed position store shared with the bot loop.
-        signal_log:     Deque of recent signal dicts shared with the bot loop.
-        ws_manager:     :class:`ConnectionManager` instance.  When omitted a
-                        new manager is created internally (useful for testing).
-                        Pass an explicit instance from ``main.py`` so the bot
-                        scheduler thread can call
-                        :meth:`~ConnectionManager.broadcast_threadsafe`.
+        position_store:   SQLite-backed position store shared with the bot loop.
+        signal_log:       Deque of recent signal dicts shared with the bot loop.
+        ws_manager:       :class:`ConnectionManager` instance.  When omitted a
+                          new manager is created internally (useful for testing).
+                          Pass an explicit instance from ``main.py`` so the bot
+                          scheduler thread can call
+                          :meth:`~ConnectionManager.broadcast_threadsafe`.
+        screener_targets: Shared list of :class:`~data_agent.screener.ScreenerResult`
+                          objects populated by the dynamic screener.  Read as a
+                          snapshot via ``list()`` on every request.
     """
     mgr = ws_manager if ws_manager is not None else ConnectionManager()
+    _screener: List = screener_targets if screener_targets is not None else []
 
     app = FastAPI(title="KimBeggar Dashboard", version="1.0.0")
 
@@ -466,11 +575,13 @@ def create_app(
 
     @app.get("/", response_class=HTMLResponse, summary="HTML 대시보드")
     def dashboard() -> str:
+        scr_dicts = [t.to_dict() if hasattr(t, "to_dict") else t for t in list(_screener)]
         return (
             _HTML
             .replace("__UPTIME__", _fmt_uptime(time.time() - _STARTED_AT))
             .replace("__POSITIONS__", _ssr_positions(position_store.get_all()))
             .replace("__SIGNALS__", _ssr_signals(list(signal_log)))
+            .replace("__SCREENER__", _ssr_screener(scr_dicts))
         )
 
     @app.get("/api/status", summary="헬스체크")
@@ -481,7 +592,14 @@ def create_app(
             "open_positions": len(position_store.get_all()),
             "recent_signals": len(signal_log),
             "ws_clients": mgr.connection_count,
+            "screener_targets": len(_screener),
         }
+
+    @app.get("/api/targets", summary="스크리너 탐색 종목 목록")
+    def api_targets() -> List[Dict[str, Any]]:
+        return [
+            t.to_dict() if hasattr(t, "to_dict") else t for t in list(_screener)
+        ]
 
     @app.get("/api/positions", summary="오픈 포지션 목록")
     def api_positions() -> Dict[str, float]:
@@ -513,6 +631,10 @@ def create_app(
                     "positions": position_store.get_all(),
                     "signals": list(signal_log),
                     "clients": mgr.connection_count,
+                    "screener": [
+                        t.to_dict() if hasattr(t, "to_dict") else t
+                        for t in list(_screener)
+                    ],
                 }
             )
 
@@ -534,6 +656,10 @@ def create_app(
                         "positions": position_store.get_all(),
                         "signals": list(signal_log),
                         "clients": mgr.connection_count,
+                        "screener": [
+                            t.to_dict() if hasattr(t, "to_dict") else t
+                            for t in list(_screener)
+                        ],
                     }
                 await ws.send_json(payload)
 

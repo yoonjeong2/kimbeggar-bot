@@ -103,6 +103,44 @@ class Settings:
         default_factory=lambda: os.getenv("PAPER_TRADING", "false").lower() == "true"
     )
 
+    # --- Leverage + Call Option Strategy --------------------------------
+    lev_call_enabled: bool = field(
+        default_factory=lambda: os.getenv("LEV_CALL_ENABLED", "false").lower() == "true"
+    )
+    lev_etf_symbol: str = field(
+        default_factory=lambda: os.getenv("LEV_ETF_SYMBOL", "122630")
+    )
+    lev_etf_alloc: float = field(
+        default_factory=lambda: float(os.getenv("LEV_ETF_ALLOC", "0.70"))
+    )
+    call_option_alloc: float = field(
+        default_factory=lambda: float(os.getenv("CALL_OPTION_ALLOC", "0.30"))
+    )
+    call_strike: float = field(
+        default_factory=lambda: float(os.getenv("CALL_STRIKE", "5500.0"))
+    )
+    call_expiry_months: int = field(
+        default_factory=lambda: int(os.getenv("CALL_EXPIRY_MONTHS", "2"))
+    )
+    entry_kospi_level: float = field(
+        default_factory=lambda: float(os.getenv("ENTRY_KOSPI_LEVEL", "5400.0"))
+    )
+    exit_kospi_level: float = field(
+        default_factory=lambda: float(os.getenv("EXIT_KOSPI_LEVEL", "6000.0"))
+    )
+    take_profit_pct: float = field(
+        default_factory=lambda: float(os.getenv("TAKE_PROFIT_PCT", "0.20"))
+    )
+    take_profit_sell_ratio: float = field(
+        default_factory=lambda: float(os.getenv("TAKE_PROFIT_SELL_RATIO", "0.50"))
+    )
+    margin_leverage: float = field(
+        default_factory=lambda: float(os.getenv("MARGIN_LEVERAGE", "3.0"))
+    )
+    vkospi_option_add_threshold: float = field(
+        default_factory=lambda: float(os.getenv("VKOSPI_OPTION_ADD_THRESHOLD", "30.0"))
+    )
+
     def __post_init__(self) -> None:
         """Load ``.env`` and re-apply environment variables over field defaults.
 
@@ -122,6 +160,38 @@ class Settings:
         self.kakao_token_file = os.getenv("KAKAO_TOKEN_FILE", self.kakao_token_file)
         self.dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
         self.paper_trading = os.getenv("PAPER_TRADING", "false").lower() == "true"
+        self.lev_call_enabled = (
+            os.getenv("LEV_CALL_ENABLED", "false").lower() == "true"
+        )
+        self.lev_etf_symbol = os.getenv("LEV_ETF_SYMBOL", self.lev_etf_symbol)
+        self.lev_etf_alloc = float(os.getenv("LEV_ETF_ALLOC", str(self.lev_etf_alloc)))
+        self.call_option_alloc = float(
+            os.getenv("CALL_OPTION_ALLOC", str(self.call_option_alloc))
+        )
+        self.call_strike = float(os.getenv("CALL_STRIKE", str(self.call_strike)))
+        self.call_expiry_months = int(
+            os.getenv("CALL_EXPIRY_MONTHS", str(self.call_expiry_months))
+        )
+        self.entry_kospi_level = float(
+            os.getenv("ENTRY_KOSPI_LEVEL", str(self.entry_kospi_level))
+        )
+        self.exit_kospi_level = float(
+            os.getenv("EXIT_KOSPI_LEVEL", str(self.exit_kospi_level))
+        )
+        self.take_profit_pct = float(
+            os.getenv("TAKE_PROFIT_PCT", str(self.take_profit_pct))
+        )
+        self.take_profit_sell_ratio = float(
+            os.getenv("TAKE_PROFIT_SELL_RATIO", str(self.take_profit_sell_ratio))
+        )
+        self.margin_leverage = float(
+            os.getenv("MARGIN_LEVERAGE", str(self.margin_leverage))
+        )
+        self.vkospi_option_add_threshold = float(
+            os.getenv(
+                "VKOSPI_OPTION_ADD_THRESHOLD", str(self.vkospi_option_add_threshold)
+            )
+        )
 
     @property
     def kis_base_url(self) -> str:

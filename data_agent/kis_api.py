@@ -33,6 +33,8 @@ _PRICE_PATH = "/uapi/domestic-stock/v1/quotations/inquire-price"
 _CHART_5MIN_PATH = "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
 _CHART_DAILY_PATH = "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice"
 _INDEX_PATH = "/uapi/domestic-stock/v1/quotations/inquire-index-price"
+_VOLUME_RANK_PATH = "/uapi/domestic-stock/v1/ranking/volume"
+_FLUCTUATION_RANK_PATH = "/uapi/domestic-stock/v1/ranking/fluctuation"
 
 
 class KISClient:
@@ -247,6 +249,81 @@ class KISClient:
                 f"KIS index response for code {index_code!r} is missing 'output' key: {data}"
             )
         return data["output"]
+
+    def get_volume_ranking(self, top_n: int = 10) -> List[Dict[str, Any]]:
+        """당일 거래량 상위 종목 순위를 조회합니다.
+
+        KIS 국내주식 거래량 순위 API (tr_id: FHPST01710000)를 호출합니다.
+
+        Args:
+            top_n: 조회할 상위 종목 수 (기본 10).
+
+        Returns:
+            종목 정보 딕셔너리 리스트. 각 항목은 ``mksc_shrn_iscd`` (종목코드),
+            ``hts_kor_isnm`` (종목명), ``stck_prpr`` (현재가),
+            ``prdy_ctrt`` (전일대비율), ``acml_vol`` (누적거래량) 등을 포함합니다.
+
+        Raises:
+            RuntimeError: KIS API 오류 응답 시.
+        """
+        data = self._request(
+            method="GET",
+            path=_VOLUME_RANK_PATH,
+            tr_id="FHPST01710000",
+            params={
+                "FID_COND_MRKT_DIV_CODE": "J",
+                "FID_COND_SCR_DIV_CODE": "20171",
+                "FID_INPUT_ISCD": "0000",
+                "FID_DIV_CLS_CODE": "0",
+                "FID_BLNG_CLS_CODE": "0",
+                "FID_TRGT_CLS_CODE": "111111111",
+                "FID_TRGT_EXLS_CLS_CODE": "000000",
+                "FID_INPUT_PRICE_1": "",
+                "FID_INPUT_PRICE_2": "",
+                "FID_VOL_CNT": str(top_n),
+                "FID_INPUT_DATE_1": "",
+            },
+        )
+        return data.get("output", [])
+
+    def get_fluctuation_ranking(self, top_n: int = 10) -> List[Dict[str, Any]]:
+        """당일 하락률 상위 종목 순위를 조회합니다 (낙폭 과대 종목 발굴).
+
+        KIS 국내주식 등락률 순위 API (tr_id: FHPST01700000)를 호출하며
+        하락률 기준으로 정렬합니다.
+
+        Args:
+            top_n: 조회할 상위 종목 수 (기본 10).
+
+        Returns:
+            종목 정보 딕셔너리 리스트. 각 항목은 ``mksc_shrn_iscd`` (종목코드),
+            ``hts_kor_isnm`` (종목명), ``stck_prpr`` (현재가),
+            ``prdy_ctrt`` (전일대비율, 음수=하락), ``acml_vol`` (누적거래량)
+            등을 포함합니다.
+
+        Raises:
+            RuntimeError: KIS API 오류 응답 시.
+        """
+        data = self._request(
+            method="GET",
+            path=_FLUCTUATION_RANK_PATH,
+            tr_id="FHPST01700000",
+            params={
+                "FID_COND_MRKT_DIV_CODE": "J",
+                "FID_COND_SCR_DIV_CODE": "20170",
+                "FID_INPUT_ISCD": "0000",
+                "FID_DIV_CLS_CODE": "0",
+                "FID_BLNG_CLS_CODE": "0",
+                "FID_TRGT_CLS_CODE": "111111111",
+                "FID_TRGT_EXLS_CLS_CODE": "000000",
+                "FID_INPUT_PRICE_1": "",
+                "FID_INPUT_PRICE_2": "",
+                "FID_VOL_CNT": str(top_n),
+                "FID_INPUT_DATE_1": "",
+                "FID_RANK_SORT_CLS_CODE": "1",  # 1=하락률 기준
+            },
+        )
+        return data.get("output", [])
 
     def simulate_trade(
         self,
