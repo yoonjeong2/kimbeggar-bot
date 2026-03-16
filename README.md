@@ -1,7 +1,7 @@
-# 🤖 KimBeggar — 절대 잃지 않는 헤지 봇
+# 김거지: 퀀텀 점프 (KimBeggar: Quantum Jump)
 
-> **"돈을 버는 것보다 잃지 않는 것이 먼저다."**
-> RSI + 이동평균 크로스오버로 매매 시그널을 탐지하고, 시장 급락 시 인버스 ETF 헤지를 자동 알림하는 국내 주식 모니터링 봇.
+> **"거지의 삶을 단계적으로 벗어나는 게 아니라,**
+> **옵션의 비대칭성(Asymmetric Payoff)과 변동성을 이용해 단숨에 신분 상승(퀀텀 점프)을 노리는 퀀트 전략 봇."**
 
 ![CI](https://github.com/yoonjeong2/kimbeggar-bot/actions/workflows/python-app.yml/badge.svg)
 [![codecov](https://codecov.io/gh/yoonjeong2/kimbeggar-bot/graph/badge.svg)](https://codecov.io/gh/yoonjeong2/kimbeggar-bot)
@@ -10,257 +10,253 @@
 
 ---
 
-## 목차 Table of Contents
+## 철학: 왜 퀀텀 점프인가?
 
-1. [프로젝트 목적](#1-프로젝트-목적)
-2. [기존 봇과의 차이점](#2-기존-봇과의-차이점)
-3. [핵심 전략 — 절대 잃지 않는 3단 방어선](#3-핵심-전략--절대-잃지-않는-3단-방어선)
-4. [아키텍처](#4-아키텍처)
-5. [디렉터리 구조](#5-디렉터리-구조)
-6. [의존성 & 기술 스택](#6-의존성--기술-스택)
-7. [설치 및 환경 구성](#7-설치-및-환경-구성)
-8. [카카오 OAuth 최초 인증](#8-카카오-oauth-최초-인증)
-9. [실행 & 샘플 출력 로그](#9-실행--샘플-출력-로그)
-10. [알림 메시지 형식](#10-알림-메시지-형식)
-11. [MVP 데모 (API 없이 알림 테스트)](#11-mvp-데모-api-없이-알림-테스트)
-12. [백테스팅 & 2022 시장 급락 시나리오](#12-백테스팅--2022-시장-급락-시나리오)
-13. [연결 테스트](#13-연결-테스트)
+전통적인 투자 방식은 **선형적 성장**을 추구합니다. 매년 10~20% 수익을 복리로 쌓아 점진적으로 자산을 늘려가는 방식입니다. 그러나 이미 밑바닥에서 시작하는 "거지"에게 선형 성장은 너무 느립니다.
+
+퀀텀 점프 전략의 핵심은 **비대칭성(Asymmetry)** 입니다:
+
+```
+일반 주식 매수: 최대 손실 -100%, 최대 수익 +100% (대칭적)
+콜 옵션 매수:  최대 손실 -100% (프리미엄만), 최대 수익 이론상 무한대 (비대칭적)
+레버리지 ETF:  2배 수익 기대, 단기 급반등에서 폭발적 성과
+```
+
+시장이 급락한 후 반등하는 순간(코스피 -12% -> 반등)에 **레버리지 ETF(70%) + 콜 옵션(30%)** 을 조합하면, 소액 자금으로 수배의 수익을 狙할 수 있습니다. 이것이 퀀텀 점프의 본질입니다.
+
+---
+
+## 목차
+
+1. [전략 개요](#1-전략-개요)
+2. [핵심 기능](#2-핵심-기능)
+3. [아키텍처](#3-아키텍처)
+4. [디렉터리 구조](#4-디렉터리-구조)
+5. [의존성 & 기술 스택](#5-의존성--기술-스택)
+6. [설치 및 환경 구성](#6-설치-및-환경-구성)
+7. [카카오 OAuth 최초 인증](#7-카카오-oauth-최초-인증)
+8. [실행 & 샘플 출력 로그](#8-실행--샘플-출력-로그)
+9. [동적 종목 발굴 (Screener)](#9-동적-종목-발굴-screener)
+10. [레버리지+콜 전략 (Quantum Jump)](#10-레버리지콜-전략-quantum-jump)
+11. [백테스팅](#11-백테스팅)
+12. [웹 대시보드](#12-웹-대시보드)
+13. [페이퍼 트레이딩](#13-페이퍼-트레이딩)
 14. [설계 원칙 & 패턴](#14-설계-원칙--패턴)
 15. [운영 체크리스트](#15-운영-체크리스트)
-16. [Docker & 크로스 플랫폼](#16-docker--크로스-플랫폼)
-17. [확장 가이드 — 새 채널 & 암호화폐](#17-확장-가이드--새-채널--암호화폐)
-18. [호환성 (Compatibility)](#18-호환성-compatibility)
-19. [페이퍼 트레이딩 모드 (PAPER_TRADING)](#19-페이퍼-트레이딩-모드-paper_trading)
-20. [Phase 6 기술 로드맵 — Alpaca API & WebSocket 실시간 시세](#20-phase-6-기술-로드맵--alpaca-api--websocket-실시간-시세)
-21. [기여 가이드 (Contributing)](#21-기여-가이드-contributing)
+16. [기여 가이드](#16-기여-가이드)
 
 ---
 
-## 1. 프로젝트 목적
+## 1. 전략 개요
 
+KimBeggar: Quantum Jump는 **3개 전략 레이어**를 동시에 운용합니다:
 
-KimBeggar는 **"절대 잃지 않는"** 원칙을 자동화한 국내 주식 헤지 알림 봇입니다.
+### Layer 1 — 기본 RSI+MA 방어 전략 (항상 활성)
 
-| 목표 | 설명 |
-|---|---|
-| **손실 최소화** | 보유 종목이 손절 임계치(기본 −5 %) 이하로 하락하면 즉시 알림 |
-| **수익 극대화** | RSI 과매도 + 골든크로스 조건에서 매수 시그널, 과매수 + 데드크로스에서 매도 시그널 |
-| **시장 방어** | 코스피/코스닥 지수 급락 감지 시 인버스 ETF 헤지 진입 알림 |
-| **24/7 모니터링** | N분 주기 자동 폴링 — 장중 내내 사람 없이 동작 |
+```
+┌─────────────────────────────────────────────────────────┐
+│  진입 필터   RSI < 30 (과매도) + 골든크로스 -> 매수 시그널  │
+│  이익 실현   RSI > 70 (과매수) + 데드크로스 -> 매도 시그널  │
+│  손실 차단   현재가 <= 진입가 x (1 - stop_loss_rate)       │
+│                                      -> 즉시 손절 알림    │
+│  [비상] 헤지  시장 지수 급락 감지 -> 인버스 ETF 헤지 알림   │
+└─────────────────────────────────────────────────────────┘
+```
 
-알림 채널은 **카카오톡 "나에게 보내기"** 를 기본으로 제공하며, Observer 패턴 기반 구조로 텔레그램·슬랙 등을 코어 코드 수정 없이 추가할 수 있습니다.
+### Layer 2 — 자동 종목 발굴 (Screener, 60분 주기)
 
-### 국제 시장 확장 로드맵 — Phase 6: Alpaca API 연동
+```
+1차: pykrx 낙폭과대 스크리닝 (당일 하락률 상위)
+     -- RSI 과매도 반등 후보 자동 발굴
+2차: KIS 거래량 순위 API
+     -- 유동성 급증 종목 (모멘텀 플레이)
+3차: KOSPI 상위 50 폴백
+     -- API 장애 / 장 마감 환경 대응
+```
 
-KimBeggar의 다음 단계는 **국내 KIS API → 글로벌 Alpaca API**로의 데이터 에이전트 확장입니다.
-동일한 전략 엔진(RSI + MA 크로스오버 + 동적 헤지)을 미국 주식·ETF에 그대로 적용할 수 있습니다.
+### Layer 3 — 레버리지 롱 + 콜 옵션 전략 (LEV_CALL_ENABLED=true)
 
-| Phase | 범위 | 핵심 변경 |
+```
+포트폴리오: KODEX 200 레버리지 ETF 70% + 코스피 콜 옵션 30%
+진입 조건:  코스피 <= 5,400pt OR (ETF RSI <= 30 AND 골든크로스)
+익절 조건:  +20% 도달 -> 50% 부분 청산
+청산 조건:  코스피 >= 6,000pt OR 데드크로스
+옵션 추가:  VKOSPI 추정치 > 30 -> 공포 극대화 시 옵션 비중 확대
+기대 수익:  코스피 +11% 반등 시 -> 전략 수익 ~+39% (마진 3배 가정)
+```
+
+---
+
+## 2. 핵심 기능
+
+| 기능 | 설명 | 상태 |
 |---|---|---|
-| Phase 1–5 | 국내 KIS API | 현재 구현 완료 |
-| **Phase 6** | **Alpaca API (미국장)** | `data_agent/alpaca_api.py` 신규 작성 |
-| Phase 7 | 멀티 브로커 통합 | `KISClient` / `AlpacaClient` 공통 인터페이스 추상화 |
-
-```python
-# Phase 6 목표 코드 — main.py 변경 없이 브로커 교체
-from data_agent.alpaca_api import AlpacaClient   # ← 이 줄만 교체
-
-kis    = KISClient(settings)    # 현재: 한국 KIS
-alpaca = AlpacaClient(settings) # Phase 6: 미국 Alpaca
-```
-
-**Alpaca API 선택 이유:**
-- REST + WebSocket 동시 지원 → 실시간 시세 수신 가능
-- Paper Trading 계정 무료 제공 → 실제 자금 없이 전략 검증
-- `APCA-API-KEY-ID` / `APCA-API-SECRET-KEY` 2개 키만으로 인증
-- `alpaca-trade-api-python` 공식 SDK 제공 (MIT 라이선스)
+| **RSI + MA 시그널** | 과매도/과매수 + 골든/데드크로스 복합 판별 | 구현 완료 |
+| **동적 헤지** | ML 변동성 예측(scikit-learn) 기반 인버스 ETF 헤지 비율 자동 산출 | 구현 완료 |
+| **자동 종목 발굴** | pykrx 낙폭과대 + KIS 거래량 + 폴백 3단 Screener | 구현 완료 |
+| **종목명 표시** | NameResolver: pykrx + 정적맵으로 "삼성전자(005930)" 형태 출력 | 구현 완료 |
+| **레버리지+콜 전략** | Black-Scholes 옵션 가격 + VKOSPI 추정 + 포트폴리오 추적 | 구현 완료 |
+| **WebSocket 대시보드** | 실시간 이벤트 드리븐 브로드캐스트, 모바일 반응형 UI | 구현 완료 |
+| **페이퍼 트레이딩** | 가상 체결을 SQLite에 기록, P&L 집계 | 구현 완료 |
+| **백테스팅** | backtrader 기반 과거 데이터 전략 검증 | 구현 완료 |
+| **2026 퀀텀점프 시뮬레이션** | 6-Phase GBM 기반 코스피 반등 시나리오 | 구현 완료 |
+| **카카오톡 알림** | 매수/매도/손절/헤지/레버리지 이벤트 실시간 알림 | 구현 완료 |
+| **Tenacity 재시도** | 네트워크 오류 시 지수 백오프 자동 복구 | 구현 완료 |
 
 ---
 
-## 2. 기존 봇과의 차이점
-
-시중에 공개된 국내 주식 알림 봇과 KimBeggar의 핵심 차별점:
-
-| 항목 | 일반 알림 봇 | **KimBeggar** |
-|---|---|---|
-| **헤지 전략** | 단순 가격 알림만 제공 | **실시간 인버스 ETF 헤지 비율 자동 산출** (MA 이탈 + 지수 급락 복합 반영) |
-| **ML 기반 동적 헤지** | 없음 | **scikit-learn LinearRegression으로 변동성 예측** → 헤지 비율을 시장 상황에 맞게 동적 조정 (`predict_volatility()` 구현 완료) |
-| **페이퍼 트레이딩** | 없음 | **PAPER_TRADING=true** 한 줄로 활성화 — 가상 체결을 SQLite `paper_trades` 테이블에 기록, P&L 집계 |
-| **알림 채널 확장** | 단일 채널 하드코딩 | **Observer 패턴** — `BaseNotifier` ABC 구현으로 카카오·텔레그램·슬랙 코어 수정 없이 추가 가능 |
-| **신호 우선순위** | 단순 조건 판별 | **4단계 우선순위 체계** (STOP_LOSS > SELL > BUY > HOLD) |
-| **에러 복구** | 예외 시 중단 | **Tenacity 재시도** (지수 백오프, 최대 3회) + **에러 발생 시 카카오 알림** |
-| **백테스팅** | 없음 | **backtrader 기반 과거 데이터 전략 검증** |
-| **테스트 커버리지** | 없음 / 미흡 | **92% 커버리지** (165개 pytest 유닛·통합 테스트) |
-| **CI/CD** | 없음 | **GitHub Actions**: black 포맷 + flake8 + pylint + pytest + Docker 빌드 자동화 |
-| **국제 시장** | 국내 전용 | **Phase 6 Alpaca API 연동** — 미국 주식·ETF에 동일 전략 적용 예정 |
+## 3. 아키텍처
 
 ```
-기존 봇: 조건 감지 → 알림 전송
-                  ↑ 여기서 끝
-
-KimBeggar:
-  지수 급락 감지 → [ML 변동성 예측] → 동적 헤지 비율 계산 → 인버스 ETF 권고량 산출 → 알림
-  주식 신호 감지 → 우선순위 판단 → 에러 시 복구·재시도 → 알림
-  백테스트로 전략 사전 검증 가능
-  (Phase 6) KIS API ↔ Alpaca API 브로커 교체 — 전략 코드 변경 없음
+┌────────────────────────────────────────────────────────────────────────┐
+│                    KimBeggar: Quantum Jump                             │
+│                                                                        │
+│  ┌──────────────────┐   ┌──────────────────────┐   ┌────────────────┐  │
+│  │   data_agent/    │   │      strategy/       │   │   notifier/    │  │
+│  │                  │   │                      │   │                │  │
+│  │  KISClient       │-->│  SignalEngine        │-->│NotifierService │  │
+│  │  (OHLCV, 지수,   │   │  (RSI+MA, 헤지)      │   │  KakaoNotifier │  │
+│  │   현재가, 거래량)  │   │                      │   │                │  │
+│  │                  │   │  LevCallSignalEngine  │   └────────────────┘  │
+│  │  Screener        │   │  (레버리지+콜 전략)    │                       │
+│  │  (pykrx + KIS    │   │                      │   ┌────────────────┐  │
+│  │   + fallback)    │   │  option_pricing.py   │   │   api/app.py   │  │
+│  │                  │   │  (Black-Scholes)      │   │                │  │
+│  │  NameResolver    │   │                      │   │  FastAPI       │  │
+│  │  (pykrx + 정적맵)│   │  vkospi_estimator.py │   │  WebSocket     │  │
+│  │                  │   │  portfolio_tracker.py│   │  Dashboard     │  │
+│  └──────────────────┘   └──────────────────────┘   └────────────────┘  │
+│                                                                        │
+│  ┌──────────────────┐   ┌──────────────────────┐                       │
+│  │   backtest/      │   │   data_agent/        │                       │
+│  │   runner.py      │   │   position_store.py  │                       │
+│  │   lev_call_      │   │   paper_trade_store  │                       │
+│  │   strategy.py    │   │   (SQLite)           │                       │
+│  └──────────────────┘   └──────────────────────┘                       │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-### ML 기반 동적 헤지란?
-
-헤지 비율을 **고정 공식**이 아닌 **학습된 변동성 예측값**으로 조정하는 방식입니다.
-`strategy/hedge_logic.py`의 `predict_volatility()` 함수로 **구현 완료**되어 있습니다.
+### 스레드 모델
 
 ```
-현재 방식: 헤지 비율 = base_ratio + MA이탈분 + 지수급락분  (규칙 기반)
-ML 방식:   헤지 비율 = predict_volatility(returns) × 0.5   (데이터 기반)
-                              ↑
-              scikit-learn LinearRegression (walk-forward 학습)
-              입력: 과거 N일 수익률의 mean / std / slope / min / max
-              출력: 다음 봉 예상 연율화 변동성 (annualized)
+main thread          bot-scheduler thread       FastAPI event loop
+    │                        │                          │
+uvicorn.run()       _run_scheduler()           WebSocket /ws
+    │                        │                          │
+    │               [60분] screener 갱신         queue.get()
+    │               [N분]  run_cycle()          ws.send_json()
+    │                        │
+    │               broadcast_threadsafe()
+    │               └-> run_coroutine_threadsafe -> event loop
 ```
 
----
-
-## 3. 핵심 전략 — 절대 잃지 않는 3단 방어선
+### 데이터 흐름
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  1단  진입 필터   RSI < 30 (과매도) + 골든크로스 → 매수 시그널    │
-│  2단  이익 실현   RSI > 70 (과매수) + 데드크로스 → 매도 시그널    │
-│  3단  손실 차단   현재가 ≤ 진입가 × (1 − stop_loss_rate)        │
-│                                              → 즉시 손절 알림  │
-│  [비상] 헤지      시장 지수 급락 감지 → 인버스 ETF 헤지 진입 알림  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 시그널 유형
-
-| `SignalType` | 조건 | 행동 |
-|---|---|---|
-| `BUY` | RSI < `rsi_oversold` **AND** 골든크로스 발생 | 매수 알림 |
-| `SELL` | RSI > `rsi_overbought` **AND** 데드크로스 발생 | 매도 알림 |
-| `STOP_LOSS` | 현재가 ≤ 진입가 × (1 − `stop_loss_rate`) | 즉시 손절 경고 |
-| `HEDGE` | 코스피/코스닥 지수 급락 감지 | 인버스 ETF 헤지 알림 |
-| `HOLD` | 해당 없음 | 관망 (알림 없음) |
-
----
-
-## 4. 아키텍처
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                        KimBeggar Bot                             │
-│                                                                  │
-│  ┌──────────────┐    ┌──────────────────┐    ┌────────────────┐  │
-│  │  data_agent  │    │    strategy      │    │   notifier     │  │
-│  │              │    │                  │    │                │  │
-│  │  KISClient   │───▶│  SignalEngine    │───▶│NotifierService │  │
-│  │  (OHLCV,     │    │  ├ indicators   │    │  (Observer)    │  │
-│  │   지수, 현재가)│    │  │  RSI / SMA   │    │  ├ Kakao      │  │
-│  │              │    │  │  CrossOver   │    │  └ (Telegram) │  │
-│  └──────────────┘    │  └ signal.py   │    └────────────────┘  │
-│         │            └──────────────────┘            │          │
-│         │                                             │          │
-│  ┌──────┴──────┐                          ┌──────────┴───────┐  │
-│  │  config/    │                          │    logger/        │  │
-│  │  Settings   │                          │  TimedRotating    │  │
-│  │  ssl.py     │                          │  FileHandler      │  │
-│  └─────────────┘                          └──────────────────┘  │
-│                                                                  │
-│  외부 API                                                        │
-│  ┌──────────────────────┐   ┌─────────────────────────────────┐  │
-│  │  KIS Open API        │   │  Kakao Talk API                  │  │
-│  │  (한국투자증권)        │   │  /v2/api/talk/memo/default/send  │  │
-│  │  OAuth2 + REST       │   │  OAuth2 (refresh_token 자동갱신) │  │
-│  └──────────────────────┘   └─────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-### 데이터 흐름 Data Flow
-
-```
-[스케줄러] N분마다
+[스케줄러 N분마다]
     │
-    ▼
-[KISClient] 5분봉 + 일봉 OHLCV 수집
+    ├── [60분 주기] Screener.get_dynamic_targets()
+    │       │ pykrx 낙폭과대 -> KIS 거래량 -> KOSPI 폴백
+    │       └-> screener_targets[] 갱신
     │
-    ▼
-[SignalEngine] RSI / SMA 계산 → 시그널 판별
+    ├── KISClient: 코스피 지수 -> HEDGE 체크
     │
-    ├─ HOLD   → 무시
+    ├── 감시 종목(정적+동적) 순회
+    │       KISClient: OHLCV + 현재가
+    │       SignalEngine: RSI / MA -> BUY/SELL/STOP_LOSS/HOLD
+    │       NotifierService -> 카카오톡
+    │       PositionStore -> SQLite
+    │       signal_log deque -> WebSocket broadcast
     │
-    └─ BUY / SELL / STOP_LOSS / HEDGE
-          │
-          ▼
-    [NotifierService] 등록된 모든 채널에 브로드캐스트
-          │
-          ├─ [KakaoNotifier] → 카카오톡 "나에게 보내기"
-          └─ [TelegramNotifier] (확장 예시)
+    └── [LEV_CALL_ENABLED=true]
+            ETF OHLCV -> VKOSPI 추정 -> BS 옵션 프리미엄
+            LevCallSignalEngine -> ENTRY/EXIT/PARTIAL_EXIT/ADD_OPTIONS
+            NotifierService -> 카카오톡
 ```
 
 ---
 
-## 5. 디렉터리 구조
+## 4. 디렉터리 구조
 
 ```
 kimbeggar/
 │
 ├── config/
-│   ├── settings.py          # .env 로드 및 전역 설정 (dataclass)
-│   └── ssl.py               # 환경별 SSL 검증 플래그 (DEV_MODE)
+│   ├── settings.py            # 전역 설정 (dataclass + .env 로드)
+│   │                          # lev_call 전략 설정 12개 포함
+│   └── ssl.py                 # 환경별 SSL 검증 플래그
 │
 ├── data_agent/
-│   └── kis_api.py           # KIS Open API 클라이언트
-│                            #   OAuth 토큰 발급/갱신, 5분봉/일봉/지수 조회
+│   ├── kis_api.py             # KIS Open API (OAuth, OHLCV, 지수, 거래량순위)
+│   ├── screener.py            # 동적 종목 발굴 (pykrx + KIS + 폴백)
+│   ├── name_resolver.py       # 종목코드 -> 한글명 (pykrx + 정적맵)
+│   ├── position_store.py      # SQLite 진입가 영속화
+│   └── paper_trade_store.py   # SQLite 페이퍼 트레이딩 기록
 │
 ├── strategy/
-│   ├── indicators.py        # RSI, SMA, EMA, 골든/데드크로스 계산
-│   └── signal.py            # SignalType enum, Signal dataclass, SignalEngine
+│   ├── indicators.py          # RSI, SMA, EMA, 골든/데드크로스, 변동성
+│   ├── signal.py              # SignalType enum, SignalEngine
+│   ├── hedge_logic.py         # 동적 헤지 비율 + ML 변동성 예측
+│   ├── option_pricing.py      # Black-Scholes 콜 옵션 (scipy 불필요)
+│   ├── vkospi_estimator.py    # 합성 VKOSPI 추정 (20일 롤링 변동성)
+│   ├── portfolio_tracker.py   # LevCallPortfolio (ETF+옵션 상태 추적)
+│   └── lev_call_signal.py     # LevCallSignalEngine (퀀텀점프 시그널)
+│
+├── backtest/
+│   ├── strategy.py            # backtrader RSI+MA 전략
+│   ├── lev_call_strategy.py   # backtrader 레버리지+콜 전략
+│   └── runner.py              # BacktestResult, run_backtest(), run_lev_call_backtest()
+│
+├── api/
+│   └── app.py                 # FastAPI 대시보드 + WebSocket 허브
 │
 ├── notifier/
-│   ├── base.py              # BaseNotifier (ABC) + NotifierService (Observer)
-│   ├── kakao.py             # KakaoNotifier — 카카오톡 "나에게 보내기"
-│   └── kakao_token_manager.py  # OAuth 토큰 파일 저장·자동 갱신
-│
-├── logger/
-│   └── log_setup.py         # 일자별 로테이팅 파일 + 콘솔 핸들러
+│   ├── base.py                # BaseNotifier (ABC) + NotifierService
+│   ├── kakao.py               # 카카오톡 "나에게 보내기"
+│   └── kakao_token_manager.py # OAuth 토큰 자동 갱신
 │
 ├── scripts/
-│   ├── kakao_auth_setup.py  # 카카오 OAuth 최초 인증 (1회 실행)
-│   ├── test_kakao.py        # 카카오 메시지 전송 연결 테스트
-│   └── test_kis.py          # KIS API 토큰 발급 + 삼성전자 현재가 테스트
+│   ├── kakao_auth_setup.py    # 카카오 OAuth 최초 인증 (1회)
+│   ├── backtest_2022_crash.py # 2022 코스피 대폭락 시뮬레이션
+│   └── backtest_lev_call_2026.py  # 2026 퀀텀점프 시뮬레이션
 │
-├── data/
-│   └── kakao_token.json     # 카카오 토큰 (자동 생성 — .gitignore 필수)
+├── tests/                     # pytest 단위 + 통합 테스트 (297개)
 │
-├── logs/
-│   └── bot.log              # 일자별 로테이팅 로그 (자동 생성)
+├── logger/
+│   └── log_setup.py           # 일자별 로테이팅 로그
 │
-├── .env                     # 환경 변수 (절대 커밋 금지)
-├── requirements.txt
-└── README.md
+├── data/                      # SQLite DB, 카카오 토큰 (자동 생성)
+├── logs/                      # bot.log (자동 생성)
+├── .env                       # 환경 변수 (절대 커밋 금지)
+└── requirements.txt
 ```
 
 ---
 
-## 6. 의존성 & 기술 스택
+## 5. 의존성 & 기술 스택
 
 | 라이브러리 | 버전 | 용도 |
 |---|---|---|
-| `requests` | ≥ 2.31 | KIS / Kakao REST API HTTP 통신 |
-| `python-dotenv` | ≥ 1.0 | `.env` 환경 변수 로드 |
-| `pandas` | ≥ 2.0 | OHLCV 시계열 데이터 처리 |
-| `numpy` | ≥ 1.24 | RSI / 지표 수치 연산 |
-| `tenacity` | ≥ 8.2 | 네트워크 오류 시 자동 재시도 (지수 백오프) |
-| `schedule` | ≥ 1.2 | N분 주기 폴링 스케줄러 |
+| `requests` | >= 2.31 | KIS / Kakao REST API |
+| `python-dotenv` | >= 1.0 | `.env` 로드 |
+| `pandas` | >= 2.0 | OHLCV 시계열 처리 |
+| `numpy` | >= 1.24 | RSI / 지표 수치 연산 |
+| `pykrx` | >= 0.6.0 | 낙폭과대 스크리닝, 종목명 조회 |
+| `tenacity` | >= 8.2 | 네트워크 오류 자동 재시도 |
+| `schedule` | >= 1.2 | N분 주기 폴링 스케줄러 |
+| `backtrader` | >= 1.9.78 | 과거 데이터 백테스팅 |
+| `fastapi` | >= 0.110 | 웹 대시보드 + REST API |
+| `uvicorn` | >= 0.29 | ASGI 서버 |
+| `scikit-learn` | >= 1.4 | ML 변동성 예측 (hedge_logic) |
+| `TA-Lib` | >= 0.4.28 | 고성능 C 기반 지표 (옵션, 폴백 있음) |
 
-**Python ≥ 3.10** 권장 (타입 힌트 문법 호환성)
+**Python >= 3.10** 권장
 
 ---
 
-## 7. 설치 및 환경 구성
+## 6. 설치 및 환경 구성
 
-### 6-1. 저장소 클론 & 가상환경
+### 저장소 클론 & 가상환경
 
 ```bash
 git clone <repo-url>
@@ -275,335 +271,420 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 6-2. `.env` 파일 작성
-
-프로젝트 루트에 `.env` 파일을 생성합니다.
+### `.env` 파일 작성
 
 ```dotenv
-# ── KIS (한국투자증권) ────────────────────────────────────────────
+# ── KIS (한국투자증권) ─────────────────────────────────────────────
 KIS_APP_KEY=발급받은_앱키
 KIS_APP_SECRET=발급받은_앱시크릿
 KIS_ACCOUNT_NO=계좌번호
 KIS_ACCOUNT_PRODUCT_CODE=01
-KIS_IS_REAL=false          # true: 실전투자 / false: 모의투자
+KIS_IS_REAL=true           # true: 실전투자 / false: 모의투자
 
-# ── 카카오톡 ─────────────────────────────────────────────────────
+# ── 카카오톡 ──────────────────────────────────────────────────────
 KAKAO_REST_API_KEY=카카오_REST_API_키
 KAKAO_TOKEN_FILE=data/kakao_token.json
 
-# ── 모니터링 종목 (KRX 6자리 코드, 쉼표 구분) ───────────────────
-WATCH_SYMBOLS=005930,000660,035720
+# ── 기본 감시 종목 (동적 스크리너가 추가 종목 자동 발굴) ────────────
+WATCH_SYMBOLS=005930,000660,122630
 
-# ── 전략 파라미터 ─────────────────────────────────────────────────
+# ── 기본 전략 파라미터 ────────────────────────────────────────────
 MONITOR_INTERVAL_MINUTES=5
 RSI_PERIOD=14
 RSI_OVERSOLD=30
 RSI_OVERBOUGHT=70
 MOVING_AVERAGE_SHORT=5
 MOVING_AVERAGE_LONG=20
-STOP_LOSS_RATE=0.05        # 5 % 손절
-HEDGE_RATIO=0.3            # 30 % 헤지
+STOP_LOSS_RATE=0.05
+HEDGE_RATIO=0.3
+
+# ── 레버리지+콜 옵션 전략 (퀀텀 점프) ─────────────────────────────
+LEV_CALL_ENABLED=false      # true로 변경하면 전략 활성화
+LEV_ETF_SYMBOL=122630       # KODEX 200 레버리지
+LEV_ETF_ALLOC=0.70          # ETF 배분 비율 70%
+CALL_OPTION_ALLOC=0.30      # 콜 옵션 배분 비율 30%
+CALL_STRIKE=5500.0          # 콜 옵션 행사가
+CALL_EXPIRY_MONTHS=2        # 만기 (개월)
+ENTRY_KOSPI_LEVEL=5400.0    # 코스피 진입 수준
+EXIT_KOSPI_LEVEL=6000.0     # 코스피 청산 수준
+TAKE_PROFIT_PCT=0.20        # 익절 기준 +20%
+TAKE_PROFIT_SELL_RATIO=0.50 # 익절 시 50% 부분 청산
+MARGIN_LEVERAGE=3.0         # 마진 레버리지 배율
+VKOSPI_OPTION_ADD_THRESHOLD=30.0  # VKOSPI > 30 시 옵션 추가 매수
 
 # ── 환경 플래그 ───────────────────────────────────────────────────
-# 개발 환경: true → SSL 검증 우회 (로컬 인증서 문제 대응)
-# 운영 배포: false 로 변경하면 전체 TLS 검증 자동 복원
-DEV_MODE=true
-
-# ── 페이퍼 트레이딩 ──────────────────────────────────────────────
-# true: 실제 주문 없이 가상 체결을 data/bot_state.db의 paper_trades 테이블에 기록
-# false (기본값): 알림만 전송, paper_trades 테이블 미사용
-PAPER_TRADING=false
+DEV_MODE=false              # true: 개발(SSL 우회) / false: 운영(TLS 검증)
+PAPER_TRADING=false         # true: 가상 체결 기록 모드
 ```
 
-> **보안 주의** — `.env`, `data/kakao_token.json`은 반드시 `.gitignore`에 추가하세요.
-
-### 6-3. KIS Open API 앱 키 발급
+### KIS Open API 앱 키 발급
 
 1. [한국투자증권 Open API](https://apiportal.koreainvestment.com) 접속
-2. 앱 등록 → `AppKey` / `AppSecret` 복사 → `.env` 기입
-3. 모의투자 테스트는 `KIS_IS_REAL=false` 유지
+2. 앱 등록 -> `AppKey` / `AppSecret` 복사 -> `.env` 기입
+3. 모의투자: `KIS_IS_REAL=false` | 실전투자: `KIS_IS_REAL=true`
 
-### 6-4. 카카오 REST API 키 발급
+### 카카오 REST API 키 발급
 
-1. [Kakao Developers](https://developers.kakao.com) → 내 애플리케이션 → 앱 추가
-2. **플랫폼** → Web → 사이트 도메인 `https://localhost` 등록
-3. **카카오 로그인** 활성화 → Redirect URI `https://localhost` 등록
-4. **동의 항목** → `talk_message` 활성화
-5. 앱 키 → REST API 키 복사 → `.env` 기입
+1. [Kakao Developers](https://developers.kakao.com) -> 내 애플리케이션 -> 앱 추가
+2. **플랫폼** -> Web -> `https://localhost` 등록
+3. **카카오 로그인** 활성화, Redirect URI `https://localhost` 등록
+4. **동의 항목** -> `talk_message` 활성화
+5. 앱 키 -> REST API 키 복사 -> `.env` 기입
 
 ---
 
-## 8. 카카오 OAuth 최초 인증
+## 7. 카카오 OAuth 최초 인증
 
-봇 최초 실행 전 **1회** 수행합니다. 발급된 토큰은 `data/kakao_token.json`에 저장되며, 이후 자동으로 갱신됩니다.
+봇 최초 실행 전 **1회** 수행합니다.
 
 ```bash
 python scripts/kakao_auth_setup.py
 ```
 
-실행 흐름:
-
 ```
 1. 터미널에 카카오 로그인 URL 출력
-2. 브라우저에서 URL 열기 → 카카오 계정 로그인 → 동의
+2. 브라우저로 URL 열기 -> 카카오 계정 로그인 -> 동의
 3. 리다이렉트된 URL (https://localhost?code=XXXX) 전체 복사
-4. 터미널에 붙여넣기 → Enter
-5. access_token / refresh_token 발급 및 data/kakao_token.json 저장
-6. 테스트 메시지 "카카오 알림 설정 완료!" 자동 전송
+4. 터미널에 붙여넣기 -> Enter
+5. data/kakao_token.json 저장
+6. 테스트 메시지 자동 전송
 ```
 
 ---
 
-## 9. 실행 & 샘플 출력 로그
+## 8. 실행 & 샘플 출력 로그
 
 ```bash
-# 봇 실행 (메인 루프)
 python main.py
 ```
 
-실행 후 동작 순서:
-
-1. `.env` 로드 → `Settings` 초기화
-2. `KISClient` / `KakaoNotifier` 초기화
-3. `schedule`이 `MONITOR_INTERVAL_MINUTES`마다 `SignalEngine.evaluate()` 호출
-4. 시그널 발생 시 `NotifierService`를 통해 카카오톡 알림 전송
-5. 모든 이벤트는 `logs/bot.log`에 타임스탬프와 함께 기록
-
-### `python main.py` 실행 시 출력되는 로그 예시
-
 ```
-2026-03-13 09:01:00 [INFO] __main__: KimBeggar bot starting up.
-2026-03-13 09:01:00 [INFO] __main__: Watching 3 symbols every 5 minute(s): 005930, 000660, 035420
-2026-03-13 09:01:01 [INFO] data_agent.kis_api: KIS access token issued; expires in 86400 seconds.
-2026-03-13 09:01:01 [INFO] __main__: === Monitoring cycle start ===
-2026-03-13 09:01:02 [INFO] __main__: 005930 | HOLD    | price=71500 | RSI=52.3
-2026-03-13 09:01:03 [INFO] __main__: 000660 | HOLD    | price=183000 | RSI=44.1
-2026-03-13 09:01:04 [INFO] __main__: 035420 | BUY     | price=214500 | RSI=27.8
-2026-03-13 09:01:04 [INFO] notifier.kakao: Kakao message sent successfully.
-2026-03-13 09:01:04 [INFO] __main__: 035420: entry price recorded at 214500
-2026-03-13 09:01:04 [INFO] __main__: === Monitoring cycle complete ===
-2026-03-13 09:01:04 [INFO] __main__: Scheduler active — next run in 5 minute(s).
-
-# 5분 뒤 — 코스피 급락 감지
-2026-03-13 09:06:04 [INFO] __main__: === Monitoring cycle start ===
-2026-03-13 09:06:05 [WARNING] __main__: HEDGE alert sent: KOSPI -2.10%
-2026-03-13 09:06:05 [INFO] notifier.kakao: Kakao message sent successfully.
-2026-03-13 09:06:06 [INFO] __main__: 035420 | STOP_LOSS | price=203500 | RSI=31.2
-2026-03-13 09:06:06 [INFO] notifier.kakao: Kakao message sent successfully.
-2026-03-13 09:06:06 [INFO] __main__: === Monitoring cycle complete ===
+2026-03-16 09:01:00 [INFO] KimBeggar bot starting up.
+2026-03-16 09:01:01 [INFO] Watching 3 symbols every 5 minute(s): 005930, 000660, 122630
+2026-03-16 09:01:01 [INFO] Bot scheduler thread started (daemon).
+2026-03-16 09:01:02 [INFO] === Monitoring cycle start ===
+2026-03-16 09:01:02 [INFO] Screener [낙폭과대/pykrx]: 5개 종목 발굴 -- ['035720', '066570', '000270', ...]
+2026-03-16 09:01:03 [INFO] 삼성전자(005930) | HOLD | price=71500 | RSI=52.3
+2026-03-16 09:01:04 [INFO] SK하이닉스(000660) | HOLD | price=183000 | RSI=44.1
+2026-03-16 09:01:05 [INFO] KODEX 레버리지(122630) | BUY | price=11250 | RSI=27.8
+2026-03-16 09:01:05 [INFO] KODEX 레버리지(122630): entry price recorded at 11250
+2026-03-16 09:01:06 [INFO] LevCall | 122630 | KOSPI=5380 | VKOSPI=28.4 | 옵션프리미엄=3250000 | signal=ENTRY
+2026-03-16 09:01:06 [INFO] === Monitoring cycle complete ===
 ```
 
 ---
 
-## 10. 알림 메시지 형식
+## 9. 동적 종목 발굴 (Screener)
 
-카카오톡으로 전송되는 메시지 예시:
+`data_agent/screener.py`의 `get_dynamic_targets()` 함수가 장 시작 시 1회, 이후 60분 주기로 실행됩니다.
 
-**매수 시그널**
+### 3단 폴백 전략
+
 ```
-📈 매수 시그널: 종목 035420
-RSI 27.8 (과매도) | 골든크로스 확인
-현재가: 214,500원
-2026-03-13 09:01
+1차 [pykrx 낙폭과대]
+    pykrx.stock.get_market_ohlcv_by_ticker(today, market="KOSPI")
+    -> 등락률 < 0 종목을 하락률 오름차순 정렬
+    -> 상위 N개 선택 (RSI 과매도 반등 후보)
+    -> source: "drop_rank"
+
+    실패 (pykrx 미설치 or 장 마감) ->
+
+2차 [KIS 거래량 순위]
+    GET /uapi/domestic-stock/v1/quotations/volume-rank
+    tr_id: FHPST01710000
+    -> 당일 거래대금 상위 N개 (모멘텀 플레이)
+    -> source: "volume_rank"
+
+    실패 (API 오류 or 샌드박스) ->
+
+3차 [KOSPI Top-50 폴백]
+    _KOSPI_TOP50 리스트에서 랜덤 N개
+    + KISClient.get_current_price() 실시간 가격 조회
+    -> source: "fallback"
 ```
 
-**긴급 손절**
-```
-🚨 긴급 손절: 종목 035420
-현재가: 203,500원
-→ 즉시 포지션 청산 필요
-2026-03-13 09:06
-```
+### NameResolver: 종목명 자동 표시
 
-**헤지 경고**
-```
-⚠️ 헤지 경고: 시장 급락
-현재가: 0원
-→ 인버스 ETF 포지션 진입 권고
-2026-03-13 09:06
+```python
+from data_agent.name_resolver import get_resolver
+
+resolver = get_resolver()
+resolver.display("005930")   # -> "삼성전자(005930)"
+resolver.display("122630")   # -> "KODEX 레버리지(122630)"
 ```
 
----
+- **1차**: pykrx `stock.get_market_ticker_name(symbol)`
+- **2차**: 내장 정적 맵 (KOSPI 50종목 + 주요 ETF)
+- 결과 캐싱으로 반복 API 호출 없음
 
-## 11. MVP 데모 (API 없이 알림 테스트)
+### 대시보드 스크리너 섹션
 
-KIS API 연결 없이 더미 데이터로 시그널을 생성하고 카카오톡 알림을 발송합니다.
+웹 대시보드(http://0.0.0.0:8000)의 하단 "자동 탐색 종목" 섹션에서 실시간으로 확인할 수 있습니다.
+
+```
+| 종목              | 현재가     | 등락률   | 거래량      | 출처    | 발굴시각 |
+|-------------------|-----------|---------|------------|--------|---------|
+| 카카오(035720)    | 43,200 원  | -4.21%  | 12,345,678 | 낙폭과대 | 09:01  |
+| LG전자(066570)    | 71,500 원  | -3.87%  | 8,234,567  | 낙폭과대 | 09:01  |
+```
+
+### REST API
 
 ```bash
-# BUY 시그널 데모 (기본값)
-python scripts/demo_signal.py
-
-# 다른 시그널 타입
-python scripts/demo_signal.py --type SELL
-python scripts/demo_signal.py --type STOP_LOSS
-python scripts/demo_signal.py --type HEDGE
-
-# 메시지 미리보기만 (카카오톡 전송 X)
-python scripts/demo_signal.py --dry-run
-```
-
-`--dry-run` 예시 출력:
-
-```
-──────────────────────────────────────────────────
-📈 매수 시그널: 종목 005930
-RSI 28.3 (과매도) | 골든크로스 확인
-현재가: 71,500원
-2026-03-13 14:30
-──────────────────────────────────────────────────
-  Length: 82 / 200 chars
-
-[dry-run] Message NOT sent.
+GET /api/targets   # 현재 스크리너 결과 JSON
+GET /api/status    # 헬스체크 (screener_targets 개수 포함)
 ```
 
 ---
 
-## 12. 백테스팅 & 2022 시장 급락 시나리오
+## 10. 레버리지+콜 전략 (Quantum Jump)
 
-과거 OHLCV 데이터로 전략 성과를 검증합니다 ([backtrader](https://www.backtrader.com/) 기반).
+`.env`에 `LEV_CALL_ENABLED=true`를 설정하면 활성화됩니다.
+
+### 전략 구조
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│              LevCall Quantum Jump Strategy                    │
+│                                                              │
+│  포트폴리오  ETF(122630) 70% + 코스피 콜 옵션 30%              │
+│             + 마진 레버리지 3배 (ETF 매수 시)                  │
+│                                                              │
+│  ENTRY     코스피 <= 5,400pt                                  │
+│         OR ETF RSI <= 30 AND 골든크로스                       │
+│                                                              │
+│  PARTIAL   포트폴리오 수익률 >= +20% -> 50% 청산              │
+│  EXIT                                                        │
+│                                                              │
+│  EXIT      코스피 >= 6,000pt                                  │
+│         OR ETF 데드크로스                                     │
+│                                                              │
+│  ADD_OPT   VKOSPI 추정치 > 30 -> 공포 극대 시 옵션 추가 매수  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 옵션 가격 모델 (Black-Scholes, scipy 불필요)
+
+```python
+from strategy.option_pricing import black_scholes_call, estimate_premium_per_contract
+
+# KOSPI 200 콜 옵션 가격 계산
+premium = black_scholes_call(
+    S=5400.0,   # 현재 코스피 수준
+    K=5500.0,   # 행사가
+    T=2/12,     # 2개월 만기
+    r=0.035,    # 한국 10Y 국채 3.5%
+    sigma=0.25, # 내재 변동성
+)
+# -> 약 7.8pt (거래승수 250,000원/pt 적용 시 계약당 ~195만원)
+```
+
+### VKOSPI 합성 추정
+
+KIS API에 VKOSPI가 없으므로 실현 변동성 기반으로 합성합니다:
+
+```python
+from strategy.vkospi_estimator import estimate_vkospi
+
+vkospi = estimate_vkospi(close_prices, window=20)
+# 20일 롤링 표준편차 연율화 x 1.2(공포 프리미엄) + 드로다운 추가분
+# -> 정상: 15~20, 공포 극대: 40~60
+```
+
+### 2026 퀀텀점프 백테스트 시뮬레이션
 
 ```bash
-# KIS API로 삼성전자 365일 데이터를 가져와 백테스트
+python scripts/backtest_lev_call_2026.py
+```
+
+6-Phase GBM 시나리오 (코스피 5,600 -> -12% 조정 -> 6,000 돌파):
+
+```
+Phase 1:  코스피 5,600 횡보  (10일, vol=15%)
+Phase 2:  5,400 조정         ( 8일, vol=40%) <- ENTRY 트리거
+Phase 3:  바닥 형성          ( 5일, vol=35%) <- 골든크로스
+Phase 4:  5,800 회복 랠리    (15일, vol=25%)
+Phase 5:  중간 조정          ( 5일, vol=30%)
+Phase 6:  6,000 돌파 청산    (10일, vol=20%) <- EXIT
+
+결과 (1,000만원 기준):
+  ENTRY: 5,368pt @ 2026-03-30
+  PARTIAL EXIT +20%: 2026-03-31
+  EXIT: 2026-04-24
+  최종 수익률: +10.4% (마진 3배 적용 시 ~+31%)
+
+vs. 코스피 Buy&Hold: +5.2%
+vs. ETF Buy&Hold: +10.4%
+```
+
+---
+
+## 11. 백테스팅
+
+### 단일 종목 RSI+MA 백테스트
+
+```bash
 python scripts/run_backtest.py --symbol 005930 --days 365 --cash 10000000
 ```
-
-샘플 결과:
 
 ```
 =======================================================
   Symbol        : 005930
-  Period        : 2025-03-13 ~ 2026-03-13
-  Bars          : 248
+  Period        : 2025-03-16 ~ 2026-03-16
   Initial cash  :      10,000,000 KRW
   Final value   :      11,243,850 KRW
   PnL           :      +1,243,850 KRW  (+12.44%)
-  Total trades  : 4
-  Won / Lost    : 3 / 1
-  Win rate      : 75.0%
+  Total trades  : 4  |  Won/Lost: 3/1  |  Win rate: 75.0%
 =======================================================
 ```
 
-### 📉 2022 코스피 대폭락 시나리오 분석
+### 2022 코스피 대폭락 시뮬레이션
 
-2022년은 글로벌 긴축·러-우 전쟁으로 코스피가 연초 3,000p에서 10월 2,155p까지 **-28%** 급락한 극단적 약세장이었습니다. KimBeggar 전략의 가상 시뮬레이션 결과:
-
-| 기간 | 이벤트 | 전략 반응 |
-|---|---|---|
-| 2022-01 | 코스피 고점(3,012p) | MA5 > MA20 — 포지션 보유 |
-| 2022-02 | 러-우 전쟁 발발, 지수 -3.1% | ⚠️ **HEDGE 알림** — 인버스 ETF 진입 권고 |
-| 2022-04 | RSI > 70 + 데드크로스 | 📉 **SELL 시그널** — 포지션 정리 |
-| 2022-06 | 금리 인상 충격, 추가 급락 | ⚠️ **HEDGE 알림** 재발동 (비중 확대) |
-| 2022-10 | 코스피 저점(2,155p), RSI < 30 + 골든크로스 | 📈 **BUY 시그널** — 바닥권 매수 |
-| 2022-12 | 반등 구간 | 수익 실현 대기 |
-
-**시뮬레이션 요약 (삼성전자 005930 기준, 1,000만원 초기 자본)**:
-
-```
-  초기 자본   :  10,000,000 KRW
-  최종 평가   :   9,870,000 KRW  (-1.3%)
-  코스피 낙폭  :             -28.4%
-  ─────────────────────────────────────
-  대비 초과수익:            +27.1%p  ← 헤지 효과
-  최대 낙폭    :              -6.2%  ← 손절선 5% 발동
-  헤지 알림    :              7회
-  손절 발동    :              2회
+```bash
+python scripts/backtest_2022_crash.py
 ```
 
-> 시뮬레이션 결과는 실제 체결가·슬리피지·세금을 반영하지 않은 추정치입니다.
-> 투자 판단은 반드시 본인의 책임 하에 이루어져야 합니다.
+2022년 코스피 -28% 폭락 환경에서 헤지 전략 효과 검증:
+
+```
+  초기 자본  :  10,000,000 KRW
+  최종 평가  :   9,870,000 KRW  (-1.3%)
+  코스피 낙폭:             -28.4%
+  대비 초과  :            +27.1%p  <- 헤지 효과
+  최대 낙폭  :              -6.2%  <- 손절 5% 발동
+```
 
 ---
 
-## 13. 연결 테스트
-
-설치 완료 후 각 모듈을 독립적으로 검증합니다.
-
-### KIS API 연결 테스트
+## 12. 웹 대시보드
 
 ```bash
-python scripts/test_kis.py
+python main.py
+# -> http://localhost:8000
 ```
 
-예상 출력:
+### 대시보드 구성
 
 ```
-KIS API 테스트 시작 (모의 투자 서버)
-[1] 액세스 토큰 발급...
-[토큰 발급 성공] expires_in=86400초
-
-[2] 삼성전자(005930) 현재가 조회...
-========================================
-  삼성전자(005930) 현재가 조회 결과
-========================================
-  현재가    : 184,200원
-  전일종가  : 187,900원
-  전일대비율: -1.97%
-  누적거래량: 16,459,671주
-========================================
+┌─────────────────────────────────────────────────────────┐
+│  KimBeggar Dashboard                    [실시간 연결됨]   │
+├──────────┬───────────┬──────────────┬──────────────────┤
+│ 오픈 포지션│ 최근 시그널 │ WS 클라이언트  │  스크리너 탐색     │
+│    2     │     8     │      1       │       5          │
+├──────────┴───────────┴──────────────┴──────────────────┤
+│ [오픈 포지션]             [최근 시그널]                    │
+│ 종목           진입가    시각  종목      시그널  가격  RSI  │
+│ KODEX레버리지  11,250   ...  삼성전자   매수   71,500 27.8│
+│ 삼성전자       71,500   ...  카카오     손절   43,200 31.2│
+├─────────────────────────────────────────────────────────┤
+│ [자동 탐색 종목 (스크리너)]                                │
+│ 종목         현재가     등락률   거래량      출처    발굴시각│
+│ 카카오       43,200    -4.21%  12,345,678  낙폭과대 09:01│
+└─────────────────────────────────────────────────────────┘
 ```
 
-### 카카오톡 메시지 전송 테스트
+- **실시간 WebSocket 업데이트**: 시그널 발생 즉시 브라우저에 반영
+- **종목명 표시**: "삼성전자(005930)" 형태로 모든 테이블에 표시
+- **모바일 반응형**: 800px 이하에서 단일 컬럼 레이아웃
+- **자동 재연결**: 연결 끊김 시 지수 백오프(1s -> 30s)로 자동 복구
 
-```bash
-python scripts/test_kakao.py
+### REST API 엔드포인트
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| `GET` | `/` | HTML 대시보드 (SSR) |
+| `GET` | `/api/status` | 헬스체크 + 통계 |
+| `GET` | `/api/positions` | 오픈 포지션 목록 |
+| `GET` | `/api/signals` | 최근 시그널 목록 (최대 50건) |
+| `GET` | `/api/targets` | 스크리너 탐색 종목 목록 |
+| `WS`  | `/ws` | 이벤트 드리븐 실시간 푸시 |
+
+---
+
+## 13. 페이퍼 트레이딩
+
+```dotenv
+PAPER_TRADING=true
 ```
 
-성공 시 카카오톡 "나에게 보내기"로 **"김거지 봇 테스트 성공!"** 수신.
+시그널 발생 시 KIS API 주문 대신 SQLite `paper_trades` 테이블에 기록합니다.
+
+```sql
+CREATE TABLE IF NOT EXISTS paper_trades (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol      TEXT    NOT NULL,
+    signal_type TEXT    NOT NULL,  -- BUY | SELL | STOP_LOSS | HEDGE | LEV_ENTRY...
+    price       REAL    NOT NULL,
+    quantity    INTEGER NOT NULL DEFAULT 1,
+    total_krw   REAL    NOT NULL,
+    traded_at   TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+);
+```
+
+```python
+from data_agent.paper_trade_store import PaperTradeStore
+
+store = PaperTradeStore("data/bot_state.db")
+trades = store.get_all()   # 전체 체결 내역
+summary = store.get_summary()  # 종목별 P&L: {"005930": {"pnl_krw": 50000.0, ...}}
+```
 
 ---
 
 ## 14. 설계 원칙 & 패턴
 
-### SSL 보안 — 환경별 조건부 검증
-
-```python
-# config/ssl.py
-def ssl_verify() -> bool:
-    """
-    DEV_MODE=true  → verify=False  (개발 환경: 로컬 인증서 우회)
-    DEV_MODE=false → verify=True   (운영 환경: 완전한 TLS 검증)
-    """
-```
-
-모든 `requests` 호출은 `verify=ssl_verify()`를 사용합니다.
-`.env`에서 `DEV_MODE=false`로 한 줄만 바꾸면 전체 TLS 검증이 복원됩니다.
-
 ### Observer 패턴 — 알림 채널 확장
 
 ```
 BaseNotifier (ABC)
-  ├── KakaoNotifier       ← 현재 구현
-  ├── TelegramNotifier    ← 추가 예시
-  └── SlackNotifier       ← 추가 예시
+  ├── KakaoNotifier       <- 현재 구현
+  ├── TelegramNotifier    <- 확장 예시
+  └── SlackNotifier       <- 확장 예시
 
 NotifierService (Composite)
   └── 등록된 모든 채널에 브로드캐스트
 ```
 
-코어 코드(`SignalEngine`, `main.py`) 수정 없이 채널 추가 가능 (OCP).
+코어 코드(`SignalEngine`, `main.py`) 수정 없이 채널 추가 가능.
 
-### Tenacity 재시도 — 네트워크 탄력성
+```python
+# main.py 한 줄 추가만으로 텔레그램 연동
+service = NotifierService([
+    KakaoNotifier(settings),
+    TelegramNotifier(settings),   # <- 이 줄만 추가
+])
+```
+
+### Tenacity 재시도
 
 ```python
 @retry(
     retry=retry_if_exception_type(requests.RequestException),
     stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=1, max=8),  # 1s → 2s → 4s
+    wait=wait_exponential(multiplier=1, min=1, max=8),  # 1s->2s->4s
 )
 ```
 
-KIS API, Kakao API의 모든 HTTP 호출에 적용.
-일시적 네트워크 장애에서 자동 복구하며, 재시도마다 WARNING 로그를 남깁니다.
+KIS API, Kakao API의 모든 HTTP 호출에 적용. 일시적 네트워크 장애에서 자동 복구.
 
-### 의존성 주입 (Dependency Injection)
+### SSL 보안
 
 ```python
-# 알림 채널을 외부에서 주입 — 테스트와 확장이 용이
-service = NotifierService([KakaoNotifier(settings)])
-service.register(TelegramNotifier(settings))
+# DEV_MODE=true  -> verify=False  (로컬 인증서 우회)
+# DEV_MODE=false -> verify=True   (운영: 완전한 TLS 검증)
 ```
 
-`SignalEngine`은 `NotifierService` 인터페이스에만 의존하며, 어떤 채널이 연결되어 있는지 알 필요가 없습니다.
+### 의존성 주입
+
+```python
+engine = SignalEngine(settings)
+service = NotifierService([KakaoNotifier(settings)])
+# SignalEngine은 어떤 알림 채널이 연결되어 있는지 알 필요 없음
+```
+
+### TA-Lib 자동 폴백
+
+TA-Lib 미설치 환경에서 `strategy/indicators.py`가 자동으로 pandas/NumPy 구현으로 전환됩니다.
 
 ---
 
@@ -611,528 +692,61 @@ service.register(TelegramNotifier(settings))
 
 배포 전 확인:
 
-- [ ] `.env`에 `DEV_MODE=false` 설정 → TLS 검증 복원
-- [ ] `.env`에 `KIS_IS_REAL=true` 설정 → 실전투자 서버 전환
-- [ ] `data/kakao_token.json`이 `.gitignore`에 포함되어 있는지 확인
-- [ ] `.env`가 `.gitignore`에 포함되어 있는지 확인
-- [ ] `logs/` 디렉터리 쓰기 권한 확인
-- [ ] `data/` 디렉터리 쓰기 권한 확인
-- [ ] 카카오 `refresh_token` 만료 전 갱신 알림 설정 (만료 30일 전 자동 갱신)
+- [ ] `.env`에 `DEV_MODE=false` 설정 -> TLS 검증 복원
+- [ ] `.env`에 `KIS_IS_REAL=true` 설정 -> 실전투자 서버
+- [ ] `data/kakao_token.json`이 `.gitignore`에 포함
+- [ ] `.env`가 `.gitignore`에 포함
+- [ ] `logs/`, `data/` 디렉터리 쓰기 권한 확인
+- [ ] 카카오 `refresh_token` 만료 전 갱신 확인 (만료 30일 전 자동 갱신)
+- [ ] `LEV_CALL_ENABLED=true` 시 `CALL_STRIKE`, `ENTRY_KOSPI_LEVEL` 현재 시장 수준으로 조정
 
 ---
 
-## 16. Docker & 크로스 플랫폼
-
-크로스 플랫폼 실행 환경 통일 및 Windows / Linux 동시 동작 검증을 위해 Docker 컨테이너화를 추가 예정입니다.
-
-```
-# 로드맵
-Dockerfile            ← 예정: python:3.11-slim 기반 이미지
-docker-compose.yml    ← 예정: 단일 커맨드 실행 환경
-```
-
-컨테이너화 완료 시 다음과 같이 실행 가능:
-
-```bash
-# 예정 사용법
-docker build -t kimbeggar .
-docker run --env-file .env kimbeggar
-```
-
-> Linux 컨테이너 내부에서는 시스템 CA 번들이 항상 최신 상태이므로
-> `DEV_MODE=false`로 안전하게 운영할 수 있습니다.
-
----
-
-## 17. 확장 가이드 — 새 채널 & 암호화폐
-
-### 텔레그램 추가 예시
-
-`BaseNotifier`를 구현하는 것만으로 코어 코드(SignalEngine, main.py) 수정 없이 채널을 추가할 수 있습니다 (**OCP 준수**):
-
-```python
-# notifier/telegram.py
-from notifier.base import BaseNotifier
-from strategy.signal import Signal
-
-class TelegramNotifier(BaseNotifier):
-    def __init__(self, settings: Settings) -> None:
-        self._bot_token = settings.telegram_bot_token
-        self._chat_id = settings.telegram_chat_id
-
-    def send_message(self, text: str) -> bool:
-        # requests.post(TELEGRAM_API_URL, ...) 구현
-        ...
-
-    def send_signal(self, signal: Signal) -> bool:
-        return self.send_message(self._format(signal))
-
-    def send_error(self, error_msg: str) -> None:
-        self.send_message(f"[ERROR] {error_msg}")
-```
-
-```python
-# main.py — 기존 코드 한 줄도 수정 불필요
-from notifier import NotifierService
-from notifier.kakao import KakaoNotifier
-from notifier.telegram import TelegramNotifier
-
-service = NotifierService([
-    KakaoNotifier(settings),
-    TelegramNotifier(settings),   # ← 이 줄만 추가
-])
-```
-
-### 🪙 암호화폐 지원 로드맵
-
-KimBeggar의 전략 엔진은 OHLCV 시계열이면 어떤 자산에도 적용 가능합니다.
-업비트(Upbit) / 바이낸스(Binance) 연동 계획:
-
-```
-현재                        →   로드맵
-────────────────────────────────────────────────────
-data_agent/kis_api.py       →   data_agent/upbit_api.py
-                                data_agent/binance_api.py
-strategy/signal.py          →   암호화폐 24h 기준 RSI 파라미터 조정
-                                (rsi_period=14 → 24h 기준 조정)
-config/settings.py          →   UPBIT_ACCESS_KEY, BINANCE_API_KEY 추가
-main.py                     →   코드 수정 없이 KISClient → UpbitClient 교체
-```
-
-> 암호화폐는 24시간 연속 거래이므로 `MONITOR_INTERVAL_MINUTES=1`로 줄이고
-> RSI 기간을 짧게(7~10) 조정하는 것을 권장합니다.
-
----
-
-## 18. 호환성 (Compatibility)
-
-### TA-Lib 설치
-
-TA-Lib은 C 확장 라이브러리로, 플랫폼별로 추가 설치 단계가 필요합니다.
-설치에 실패하면 자동으로 순수 pandas/NumPy 구현으로 폴백됩니다.
-
-#### macOS
-
-```bash
-# Homebrew로 C 라이브러리 먼저 설치
-brew install ta-lib
-
-# 그 다음 Python 바인딩 설치
-pip install ta-lib
-```
-
-> Homebrew가 없다면: [brew.sh](https://brew.sh) 참조
-
-#### Windows
-
-```bash
-# 방법 1 — 사전 컴파일된 wheel 사용 (권장)
-pip install --no-binary :all: ta-lib
-
-# 방법 2 — Christoph Gohlke의 비공식 wheel
-# https://www.lfd.uci.edu/~gohlke/pythonlibs/#ta-lib
-# 예시 (Python 3.11, 64-bit):
-pip install TA_Lib-0.4.28-cp311-cp311-win_amd64.whl
-```
-
-> Visual C++ Build Tools가 필요한 경우:
-> [Microsoft Build Tools 2022](https://visualstudio.microsoft.com/visual-cpp-build-tools/) 다운로드
-
-#### Linux (Ubuntu/Debian)
-
-```bash
-# C 라이브러리 소스 빌드
-wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
-tar -xzf ta-lib-0.4.0-src.tar.gz
-cd ta-lib && ./configure --prefix=/usr && make && sudo make install
-
-# Python 바인딩
-pip install ta-lib
-```
-
-#### TA-Lib 없이 실행 (폴백 모드)
-
-TA-Lib이 설치되지 않은 환경에서도 모든 기능이 동작합니다.
-`strategy/indicators.py`가 자동으로 pandas/NumPy 구현으로 전환됩니다.
-
-```python
-# 설치 여부 확인
-python -c "import talib; print('TA-Lib OK:', talib.__version__)"
-# ImportError → 폴백 모드로 자동 전환
-```
-
-#### Python 버전별 지원 현황
-
-| Python | TA-Lib wheel | 폴백 pandas |
-|--------|-------------|------------|
-| 3.9    | ✅           | ✅          |
-| 3.10   | ✅           | ✅          |
-| 3.11   | ✅           | ✅          |
-| 3.12   | ✅ (0.4.28+) | ✅          |
-
----
-
-## 19. 페이퍼 트레이딩 모드 (PAPER_TRADING)
-
-실제 자금 없이 전략을 검증할 수 있는 **가상 체결 기록 모드**입니다.
-`PAPER_TRADING=true`로 활성화하면 non-HOLD 시그널이 발생할 때마다
-KIS API 주문 대신 SQLite `paper_trades` 테이블에 체결 내역을 기록합니다.
-
-### 활성화
-
-```dotenv
-# .env
-PAPER_TRADING=true
-```
-
-### 동작 원리
-
-```
-시그널 발생 (BUY / SELL / STOP_LOSS / HEDGE)
-    │
-    ├─ [항상] NotifierService → 카카오톡 알림 전송
-    │
-    └─ [PAPER_TRADING=true] PaperTradeStore.record()
-            │
-            └─ data/bot_state.db / paper_trades 테이블에 INSERT
-```
-
-### paper_trades 테이블 스키마
-
-```sql
-CREATE TABLE IF NOT EXISTS paper_trades (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    symbol      TEXT    NOT NULL,         -- 종목 코드 (예: '005930')
-    signal_type TEXT    NOT NULL,         -- 'BUY' | 'SELL' | 'STOP_LOSS' | 'HEDGE'
-    price       REAL    NOT NULL,         -- 체결 가격 (KRW)
-    quantity    INTEGER NOT NULL DEFAULT 1,
-    total_krw   REAL    NOT NULL,         -- price × quantity
-    traded_at   TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
-);
-```
-
-### 페이퍼 트레이딩 결과 조회
-
-```python
-from data_agent.paper_trade_store import PaperTradeStore
-
-store = PaperTradeStore("data/bot_state.db")
-
-# 전체 체결 내역 (newest first)
-trades = store.get_all()
-# [{"id": 5, "symbol": "005930", "signal_type": "SELL", "price": 75000.0, ...}, ...]
-
-# 종목별 P&L 요약
-summary = store.get_summary()
-# {"005930": {"bought_krw": 700000.0, "sold_krw": 750000.0,
-#             "pnl_krw": 50000.0, "trades": 2}}
-```
-
-### 로그 예시 (PAPER_TRADING=true)
-
-```
-2026-03-16 09:31:04 [INFO] __main__: PAPER_TRADING mode active — all fills recorded to data/bot_state.db
-2026-03-16 09:31:05 [INFO] __main__: 005930 | BUY | price=71500 | RSI=27.8
-2026-03-16 09:31:05 [INFO] __main__: [PAPER] BUY 005930 @ 71500 체결 기록
-2026-03-16 09:36:06 [INFO] __main__: 005930 | STOP_LOSS | price=67800 | RSI=31.2
-2026-03-16 09:36:06 [INFO] __main__: [PAPER] STOP_LOSS 005930 @ 67800 체결 기록
-```
-
----
-
-## 20. Phase 6 기술 로드맵 — Alpaca API & WebSocket 실시간 시세
-
-KimBeggar Phase 6는 국내 KIS API 아키텍처를 **미국 Alpaca API**로 확장하는 단계입니다.
-동일한 전략 엔진(RSI + MA + 동적 헤지)을 미국 주식·ETF에 적용하며,
-Alpaca의 **WebSocket 실시간 시세**를 KimBeggar 대시보드 WebSocket과 통합합니다.
-
-### 아키텍처 개요
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                        KimBeggar Phase 6 Architecture                    │
-│                                                                          │
-│  Alpaca API                    KimBeggar Core              Dashboard     │
-│  ┌─────────────────────┐       ┌────────────────┐       ┌────────────┐  │
-│  │  REST API           │       │                │       │            │  │
-│  │  /v2/assets         │──────▶│  AlpacaClient  │──────▶│ SignalEng. │  │
-│  │  /v2/bars           │       │  (data_agent/) │       │            │  │
-│  │  /v2/orders  (PT)   │       └────────────────┘       └─────┬──────┘  │
-│  │                     │                                       │         │
-│  │  WebSocket          │       ┌────────────────┐             │         │
-│  │  wss://stream.      │       │ ConnectionMgr  │◀────────────┘         │
-│  │  data.alpaca.       │──────▶│ (api/app.py)   │                       │
-│  │  markets/v2/iex     │       │ broadcast_     │──────▶ Browser WS     │
-│  │  (실시간 시세)        │       │ threadsafe()   │       /ws endpoint    │
-│  └─────────────────────┘       └────────────────┘                       │
-│                                                                          │
-│  Paper Trading (Alpaca)                                                  │
-│  ┌────────────────────────────────────────────────────────────────────┐  │
-│  │  Alpaca Paper Account (무료)                                        │  │
-│  │  ├── POST /v2/orders  → 가상 주문 체결 (KIS simulate_trade와 동일)  │  │
-│  │  └── GET  /v2/positions → 포지션 조회 (data/bot_state.db와 병행)   │  │
-│  └────────────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────────┘
-```
-
-### AlpacaClient 설계 (예정 코드)
-
-```python
-# data_agent/alpaca_api.py  — Phase 6 예정 구현
-from __future__ import annotations
-
-import asyncio
-import json
-import threading
-from typing import Any, Callable, Dict, List, Optional
-
-import requests
-import websockets
-
-
-class AlpacaClient:
-    """Alpaca Markets REST + WebSocket 클라이언트.
-
-    KISClient와 동일한 인터페이스를 노출하여 main.py 코드 변경 없이
-    브로커를 교체할 수 있도록 설계합니다.
-    """
-
-    _BASE_REST  = "https://data.alpaca.markets"
-    _BASE_TRADE = "https://paper-api.alpaca.markets"  # Paper Trading
-    _WS_URL     = "wss://stream.data.alpaca.markets/v2/iex"
-
-    def __init__(self, settings: Settings) -> None:
-        self._key    = settings.alpaca_api_key_id
-        self._secret = settings.alpaca_api_secret_key
-        self._headers = {
-            "APCA-API-KEY-ID":     self._key,
-            "APCA-API-SECRET-KEY": self._secret,
-        }
-
-    # ── REST: KISClient 호환 인터페이스 ─────────────────────────────────
-    def get_ohlcv_daily(self, symbol: str, period: int = 60) -> List[Dict]:
-        """일봉 OHLCV — KISClient.get_ohlcv_daily()와 동일 반환 형식."""
-        resp = requests.get(
-            f"{self._BASE_REST}/v2/stocks/{symbol}/bars",
-            headers=self._headers,
-            params={"timeframe": "1Day", "limit": period},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        bars = resp.json().get("bars", [])
-        return [
-            {
-                "stck_bsop_date": bar["t"][:10].replace("-", ""),
-                "stck_oprc": str(bar["o"]),
-                "stck_hgpr": str(bar["h"]),
-                "stck_lwpr": str(bar["l"]),
-                "stck_clpr": str(bar["c"]),
-                "acml_vol":  str(bar["v"]),
-            }
-            for bar in bars
-        ]
-
-    def get_current_price(self, symbol: str) -> Dict[str, Any]:
-        """최신 호가 — KISClient.get_current_price()와 동일 키 반환."""
-        resp = requests.get(
-            f"{self._BASE_REST}/v2/stocks/{symbol}/quotes/latest",
-            headers=self._headers,
-            timeout=10,
-        )
-        resp.raise_for_status()
-        quote = resp.json().get("quote", {})
-        mid = (quote.get("ap", 0) + quote.get("bp", 0)) / 2
-        return {"stck_prpr": str(mid)}
-
-    # ── WebSocket: 실시간 시세 수신 ────────────────────────────────────
-    def subscribe_realtime(
-        self,
-        symbols: List[str],
-        on_trade: Callable[[Dict[str, Any]], None],
-    ) -> None:
-        """백그라운드 스레드에서 Alpaca IEX WebSocket을 구독합니다.
-
-        수신된 trade 이벤트마다 ``on_trade(event)`` 콜백을 호출합니다.
-        ConnectionManager.broadcast_threadsafe()를 콜백으로 전달하면
-        대시보드 WebSocket 클라이언트에 실시간으로 데이터를 푸시할 수 있습니다.
-        """
-        thread = threading.Thread(
-            target=self._ws_loop,
-            args=(symbols, on_trade),
-            daemon=True,
-            name="alpaca-ws",
-        )
-        thread.start()
-
-    def _ws_loop(
-        self,
-        symbols: List[str],
-        on_trade: Callable[[Dict[str, Any]], None],
-    ) -> None:
-        asyncio.run(self._ws_connect(symbols, on_trade))
-
-    async def _ws_connect(
-        self,
-        symbols: List[str],
-        on_trade: Callable[[Dict[str, Any]], None],
-    ) -> None:
-        async with websockets.connect(self._WS_URL) as ws:
-            # 인증
-            await ws.send(json.dumps({
-                "action": "auth",
-                "key":    self._key,
-                "secret": self._secret,
-            }))
-            # 구독
-            await ws.send(json.dumps({
-                "action":  "subscribe",
-                "trades":  symbols,
-            }))
-            async for raw in ws:
-                msgs = json.loads(raw)
-                for msg in msgs:
-                    if msg.get("T") == "t":   # trade event
-                        on_trade({
-                            "symbol": msg["S"],
-                            "price":  msg["p"],
-                            "size":   msg["s"],
-                            "time":   msg["t"],
-                        })
-```
-
-### 실시간 데이터 흐름 (Phase 6)
-
-```
-Alpaca WebSocket (IEX feed)
-    │  trade event {symbol, price, size, time}
-    ▼
-AlpacaClient._ws_loop()  ← daemon thread
-    │
-    │  on_trade(event) callback
-    ▼
-ConnectionManager.broadcast_threadsafe(payload)
-    │  asyncio.run_coroutine_threadsafe → FastAPI event loop
-    ▼
-ConnectionManager.broadcast(payload)
-    │  payload → each client asyncio.Queue
-    ▼
-/ws WebSocket handler
-    │  q.get() → ws.send_json(payload)
-    ▼
-Browser Dashboard (실시간 가격 갱신, 0.5s 이하 지연)
-```
-
-### 필요한 환경변수 (Phase 6)
-
-```dotenv
-# .env — Phase 6 추가 항목
-ALPACA_API_KEY_ID=your_alpaca_key_id
-ALPACA_API_SECRET_KEY=your_alpaca_secret_key
-ALPACA_PAPER=true               # true: Paper Trading / false: Live
-WATCH_SYMBOLS_US=AAPL,MSFT,SPY  # 미국 종목 코드 (Alpaca 용)
-```
-
-### Settings 확장 (Phase 6)
-
-```python
-# config/settings.py — Phase 6 추가 필드
-alpaca_api_key_id:     str  = field(default_factory=lambda: os.getenv("ALPACA_API_KEY_ID", ""))
-alpaca_api_secret_key: str  = field(default_factory=lambda: os.getenv("ALPACA_API_SECRET_KEY", ""))
-alpaca_paper:          bool = field(default_factory=lambda: os.getenv("ALPACA_PAPER", "true").lower() == "true")
-watch_symbols_us: List[str] = field(default_factory=lambda: os.getenv("WATCH_SYMBOLS_US", "").split(","))
-```
-
-### main.py 교체 예시 (코드 변경 최소화)
-
-```python
-# main.py — Phase 6: 브로커 교체 시 이 블록만 수정
-if settings.alpaca_api_key_id:
-    from data_agent.alpaca_api import AlpacaClient
-    kis = AlpacaClient(settings)          # ← KISClient 대신 AlpacaClient
-    watch = settings.watch_symbols_us
-    # WebSocket 실시간 구독 시작
-    kis.subscribe_realtime(watch, ws_manager.broadcast_threadsafe)
-else:
-    kis = KISClient(settings)             # 기존 한국 KIS API
-    watch = settings.watch_symbols
-```
-
-### Phase 6 구현 마일스톤
-
-| 단계 | 작업 | 예상 결과 |
-|---|---|---|
-| **6-1** | `data_agent/alpaca_api.py` 작성 | REST OHLCV / 현재가 → KISClient 동일 인터페이스 |
-| **6-2** | `AlpacaClient.subscribe_realtime()` 구현 | Alpaca IEX WebSocket → ConnectionManager 실시간 브로드캐스트 |
-| **6-3** | `config/settings.py` 확장 | `ALPACA_API_KEY_ID`, `WATCH_SYMBOLS_US` 추가 |
-| **6-4** | Alpaca Paper Trading 주문 연동 | `POST /v2/orders` → PaperTradeStore와 병행 기록 |
-| **6-5** | `tests/test_alpaca_api.py` 작성 | `responses` 라이브러리로 REST mock, asyncio mock WS |
-| **6-6** | 멀티 브로커 추상화 (`BaseBrokerClient`) | 공통 인터페이스 추출 → `KISClient` / `AlpacaClient` 양쪽 적용 |
-
-### Alpaca Paper Trading 계정 무료 생성
-
-1. [alpaca.markets](https://alpaca.markets) 가입
-2. **Paper Trading** 계정 활성화 (신용카드 불필요)
-3. API Keys 발급 → `.env`에 `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` 기입
-4. `ALPACA_PAPER=true` 설정 → 실제 자금 없이 미국장 전략 검증 가능
-
----
-
-## 21. 기여 가이드 (Contributing)
-
-KimBeggar는 오픈소스 프로젝트입니다. 개선 아이디어나 버그 리포트를 환영합니다!
+## 16. 기여 가이드
 
 ### 기여 절차
 
 ```bash
-# 1. 저장소 Fork
-# 2. 피처 브랜치 생성
 git checkout -b feat/your-feature-name
 
-# 3. 코드 작성 + 테스트
+# 코드 작성 + 테스트
 pytest tests/ --cov-fail-under=80
 
-# 4. 스타일 확인
+# 스타일 확인
 black .
 flake8 .
 
-# 5. 커밋 & PR
 git commit -m "feat: describe your change"
 git push origin feat/your-feature-name
-# → GitHub에서 Pull Request 생성
+# -> GitHub에서 Pull Request 생성
 ```
 
 ### 기여 체크리스트
 
-- [ ] 새 기능에 대한 단위 테스트 추가 (커버리지 80% 이상 유지)
+- [ ] 새 기능에 대한 단위 테스트 추가 (커버리지 80% 이상)
 - [ ] `black .` 포맷 통과
 - [ ] `flake8 .` 경고 없음
-- [ ] 환경 변수 추가 시 `.env.example`에 문서화
+- [ ] 환경 변수 추가 시 `.env` 예시에 문서화
 - [ ] PR 설명에 변경 이유와 테스트 방법 기재
 
-### 우선순위 높은 기여 과제
-
-| 과제 | 난이도 | 설명 |
-|---|---|---|
-| `TelegramNotifier` 구현 | ⭐⭐ | `BaseNotifier` 구현체 추가 |
-| 업비트 데이터 에이전트 | ⭐⭐⭐ | `data_agent/upbit_api.py` 작성 |
-| 포지션 영속화 | ⭐⭐ | `entry_prices`를 SQLite/JSON으로 영속 저장 |
-| 웹 대시보드 | ⭐⭐⭐⭐ | FastAPI + Chart.js로 실시간 시그널 시각화 |
-| Docker Compose 배포 | ⭐⭐ | `docker-compose.yml` 작성 |
-
-### 코드 스타일 가이드
+### 코드 스타일
 
 - **포맷**: `black` (line-length=100)
 - **린트**: `flake8` (E203, W503 제외)
 - **타입 힌트**: 모든 public 함수에 PEP 484 타입 어노테이션
 - **독스트링**: Google 스타일 (`Args:`, `Returns:`, `Raises:`)
-- **커밋 메시지**: [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`)
+- **커밋**: Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`)
 
 ---
 
 ## 라이선스
 
-MIT License — 자유롭게 사용·수정·배포 가능합니다.
+MIT License — 자유롭게 사용, 수정, 배포 가능합니다.
 실전 투자 활용 시 KIS Open API 이용약관 및 관련 금융 법규를 준수하세요.
+
+> **면책 고지**: 이 봇은 교육 및 연구 목적으로 제작되었습니다.
+> 실제 투자 결과에 대한 책임은 전적으로 사용자 본인에게 있습니다.
+> 레버리지 및 옵션 거래는 원금 이상의 손실이 발생할 수 있습니다.
 
 ```
 Copyright (c) 2026 KimBeggar Contributors
