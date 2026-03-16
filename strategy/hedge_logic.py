@@ -91,82 +91,118 @@ def calculate_hedge_ratio(
     return round(min(max(ratio, MIN_RATIO), MAX_RATIO), 4)
 
 
-def predict_volatility(returns: List[float]) -> float:
-    """Predict next-period volatility using a scikit-learn LinearRegression model.
+def predict_volatility(returns: List[float], window: int = 10) -> float:
+    """Predict next-period annualised volatility using a walk-forward LinearRegression.
 
-    This function is a **TODO stub** for Phase 6 (ML 기반 동적 헤지).
-    The intent is to replace the fixed ``MA_DEVIATION_SCALE`` / ``INDEX_DROP_SCALE``
-    multipliers in :func:`calculate_hedge_ratio` with a data-driven volatility
-    forecast that feeds directly into the hedge ratio.
+    Approach
+    --------
+    Trains a :class:`sklearn.linear_model.LinearRegression` model entirely on
+    the supplied ``returns`` series using a walk-forward scheme — no pre-trained
+    weights file is required.
 
-    Planned implementation
-    ----------------------
-    1. Feature engineering — sliding-window statistics derived from ``returns``:
-       - Mean return over the last N bars
-       - Realised volatility (std-dev of returns) over the last N bars
-       - Trend indicator (slope of a linear fit over the last N bars)
+    For each rolling window of ``window`` bars the following features are computed:
 
-    2. Model — ``sklearn.linear_model.LinearRegression`` trained offline on
-       historical data; the fitted model would be serialised with ``joblib``
-       and loaded at startup.
+    ==================  =====================================================
+    Feature             Description
+    ==================  =====================================================
+    ``mean``            Mean daily return over the window
+    ``vol``             Realised volatility (std-dev, ddof=1) over the window
+    ``slope``           Linear trend slope (np.polyfit degree-1 coefficient)
+    ``min`` / ``max``   Extreme returns in the window (tail-risk proxies)
+    ==================  =====================================================
 
-    3. Output — annualised volatility forecast used as a scalar adjustment to
-       the hedge ratio::
+    The **target** is the realised volatility of the immediately following
+    ``window`` bars — i.e. the model learns "given how volatile the last
+    10 days were, how volatile will the next 10 days be?".
 
-           ratio += predict_volatility(recent_returns) * VOLATILITY_SCALE
+    After fitting, the model predicts on the *most recent* ``window`` bars
+    to produce the next-period forecast, which is then annualised::
 
-    Example (illustrative — model not yet trained):
+        annualised_vol = daily_vol_forecast × √252
 
-    .. code-block:: python
+    Fallback
+    --------
+    When ``len(returns) < 2 * window + 1`` (insufficient history), the function
+    falls back to the simple annualised standard-deviation of all available
+    returns.  This ensures the function always returns a sensible value even
+    for very short series.
 
-        # TODO: replace stub with a fitted model loaded from disk
-        # import joblib
-        # _model = joblib.load("models/volatility_lr.pkl")
+    Integration with ``calculate_hedge_ratio``
+    ------------------------------------------
+    The returned volatility can be used to scale the hedge ratio dynamically::
 
-        import numpy as np
-        from sklearn.linear_model import LinearRegression
-
-        def predict_volatility(returns: List[float]) -> float:
-            n = len(returns)
-            X = np.arange(n).reshape(-1, 1)
-            y = np.array(returns)
-            lr = LinearRegression().fit(X, y)       # trend line
-            residuals = y - lr.predict(X)
-            realised_vol = float(np.std(residuals))  # annualise as needed
-            return realised_vol * (252 ** 0.5)       # daily → annual
+        ml_vol = predict_volatility(recent_returns)   # e.g. 0.35 = 35 % ann.
+        ratio  = calculate_hedge_ratio(price, long_ma, base_ratio=ml_vol * 0.5)
 
     Args:
-        returns: List of daily log-returns (most recent last), e.g.
-                 ``[(close_t / close_{t-1}) - 1 for ...]``.
-                 Recommended length: 20–60 bars.
+        returns: Daily simple or log returns, oldest first, most recent last
+                 (e.g. ``[(c1/c0) - 1, (c2/c1) - 1, ...]``).
+                 Recommended length: 30–120 bars for stable estimates.
+        window:  Look-back / look-forward window size used to build training
+                 pairs (default 10).  Must be ≥ 3.
 
     Returns:
-        Predicted annualised volatility as a decimal (e.g. ``0.25`` = 25 %).
-        Returns ``0.0`` until a trained model is available.
+        Predicted annualised volatility as a decimal
+        (e.g. ``0.30`` = 30 %).  Always ≥ 0.
 
-    Note:
-        ``scikit-learn`` must be installed (``pip install scikit-learn``).
-        The dependency is listed in ``requirements.txt`` but the model weights
-        file (``models/volatility_lr.pkl``) is not yet generated.
-        See Phase 6 in ``PROGRESS.md`` for the implementation timeline.
+    Raises:
+        ImportError: If ``scikit-learn`` is not installed.
     """
-    # TODO (Phase 6): load a pre-trained model and return its prediction.
-    #
-    #   import numpy as np
-    #   from sklearn.linear_model import LinearRegression
-    #
-    #   n = len(returns)
-    #   if n < 5:
-    #       return 0.0
-    #   X = np.arange(n).reshape(-1, 1)
-    #   y = np.array(returns, dtype=float)
-    #   lr = LinearRegression().fit(X, y)
-    #   residuals = y - lr.predict(X)
-    #   daily_vol = float(np.std(residuals, ddof=1))
-    #   return daily_vol * (252 ** 0.5)   # annualise
+    import numpy as np
+    from sklearn.linear_model import LinearRegression
 
-    _ = returns  # suppress "unused argument" linter warning until implemented
-    return 0.0   # stub: no adjustment until model is trained
+    arr = np.array(returns, dtype=float)
+    n = len(arr)
+    min_required = 2 * window + 1
+
+    # ── Fallback: not enough data for walk-forward training ──────────────
+    if n < min_required:
+        daily_vol = float(np.std(arr, ddof=1)) if n > 1 else 0.0
+        return round(daily_vol * (252**0.5), 6)
+
+    # ── Build (features, target) training pairs ───────────────────────────
+    t = np.arange(window, dtype=float)
+    X_rows: List[List[float]] = []
+    y_vals: List[float] = []
+
+    for i in range(n - 2 * window):
+        w = arr[i : i + window]
+        nxt = arr[i + window : i + 2 * window]
+        slope = float(np.polyfit(t, w, 1)[0])
+        X_rows.append(
+            [
+                float(w.mean()),
+                float(w.std(ddof=1)),
+                slope,
+                float(w.min()),
+                float(w.max()),
+            ]
+        )
+        y_vals.append(float(nxt.std(ddof=1)))
+
+    X = np.array(X_rows)
+    y = np.array(y_vals)
+
+    # ── Train LinearRegression in-sample ─────────────────────────────────
+    lr = LinearRegression().fit(X, y)
+
+    # ── Predict on most recent window ────────────────────────────────────
+    last_w = arr[-window:]
+    slope_last = float(np.polyfit(t, last_w, 1)[0])
+    x_pred = np.array(
+        [
+            [
+                float(last_w.mean()),
+                float(last_w.std(ddof=1)),
+                slope_last,
+                float(last_w.min()),
+                float(last_w.max()),
+            ]
+        ]
+    )
+
+    daily_vol_pred = float(max(lr.predict(x_pred)[0], 0.0))
+    return round(daily_vol_pred * (252**0.5), 6)
 
 
 def describe_hedge(ratio: float) -> str:
