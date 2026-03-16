@@ -10,10 +10,10 @@ uvicorn[standard]>=0.29.0  # ASGI server for FastAPI
 pytest>=7.4.0           # test runner (also in requirements-dev.txt)
 pytest-cov>=4.1.0       # coverage reporting
 
-# TA-Lib: high-performance C-based indicator library (optional).
+# TA-Lib: high-performance C-based indicator library.
 # Installation varies by environment:
 #   pip    : pip install TA-Lib  (requires pre-built C library on the system)
 #   conda  : conda install -c conda-forge ta-lib   ← recommended on Windows/macOS
-# If installed, indicators can be replaced with talib.RSI(), talib.SMA(), etc.
-# for faster computation on large OHLCV datasets.
-# TA-Lib>=0.4.28
+# If TA-Lib is not installed, strategy/indicators.py falls back to the
+# pure pandas/numpy implementation automatically (no code change required).
+TA-Lib>=0.4.28

@@ -17,6 +17,7 @@ One position at a time; size is computed as
 from __future__ import annotations
 
 import logging
+from typing import Optional
 
 import backtrader as bt
 
@@ -52,30 +53,37 @@ class KimBeggarStrategy(bt.Strategy):
     )
 
     def __init__(self) -> None:
-        self.rsi = bt.indicators.RSI(
+        self.rsi: bt.indicators.RSI = bt.indicators.RSI(
             self.data.close,
             period=self.p.rsi_period,
             safediv=True,
         )
-        self.sma_short = bt.indicators.SMA(self.data.close, period=self.p.ma_short)
-        self.sma_long = bt.indicators.SMA(self.data.close, period=self.p.ma_long)
+        self.sma_short: bt.indicators.SMA = bt.indicators.SMA(
+            self.data.close, period=self.p.ma_short
+        )
+        self.sma_long: bt.indicators.SMA = bt.indicators.SMA(
+            self.data.close, period=self.p.ma_long
+        )
         # +1 when short crosses above long (golden cross); -1 for dead cross
-        self.crossover = bt.indicators.CrossOver(self.sma_short, self.sma_long)
+        self.crossover: bt.indicators.CrossOver = bt.indicators.CrossOver(
+            self.sma_short, self.sma_long
+        )
 
         self._entry_price: float = 0.0
-        self._order = None  # pending order reference
+        self._order: Optional[bt.Order] = None  # pending order reference
 
     # ------------------------------------------------------------------
     # backtrader callbacks
     # ------------------------------------------------------------------
 
     def notify_order(self, order: bt.Order) -> None:
+        """Handle order status transitions."""
         if order.status in (order.Submitted, order.Accepted):
             return
 
         if order.status == order.Completed:
             if order.isbuy():
-                self._entry_price = order.executed.price
+                self._entry_price = float(order.executed.price)
                 _logger.debug(
                     "BUY executed @ %.2f  size=%d",
                     order.executed.price,
@@ -95,17 +103,18 @@ class KimBeggarStrategy(bt.Strategy):
         self._order = None
 
     def next(self) -> None:
+        """Evaluate signal conditions on each bar."""
         # Do not double-order while one is pending
-        if self._order:
+        if self._order is not None:
             return
 
-        current_price: float = self.data.close[0]
+        current_price: float = float(self.data.close[0])
 
         if not self.position:
             # --- BUY condition -----------------------------------------
             # RSI oversold AND golden cross (short SMA just crossed above long)
             if self.rsi[0] <= self.p.rsi_oversold and self.crossover[0] > 0:
-                size = int(self.broker.getcash() // current_price)
+                size: int = int(self.broker.getcash() // current_price)
                 if size > 0:
                     _logger.debug(
                         "BUY signal @ %.2f  RSI=%.1f  size=%d",

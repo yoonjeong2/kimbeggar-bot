@@ -53,10 +53,13 @@ class TestCalculateRsi:
 
     def test_first_period_values_are_nan(self, ascending_prices):
         result = calculate_rsi(ascending_prices, period=14)
-        # ta library (Wilder smoothing) needs exactly period data points for the
-        # first value, so the first (period - 1) = 13 entries are NaN.
+        # Warm-up NaN count depends on the active backend:
+        #   pandas fallback : min_periods = period - 1 = 13  → first valid at index 13
+        #   TA-Lib          : lookback    = period     = 14  → first valid at index 14
+        # Both cases guarantee at least the first (period - 1) = 13 entries are NaN.
         assert result.iloc[:13].isna().all()
-        assert not pd.isna(result.iloc[13])
+        # At least one valid (non-NaN) value must appear within the first period+1 bars.
+        assert result.iloc[13:16].notna().any()
 
     def test_rsi_range_0_to_100(self, ascending_prices):
         result = calculate_rsi(ascending_prices, period=14).dropna()

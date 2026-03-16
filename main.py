@@ -70,7 +70,7 @@ def run_cycle(
     """
     logger = logging.getLogger(__name__)
     if not is_market_open():
-        logger.info("장 운영 시간 외 — 사이클 스킵")
+        logger.info("Market hours filter — cycle skipped.")
         return
     logger.info("=== Monitoring cycle start ===")
 
@@ -96,7 +96,7 @@ def run_cycle(
             logger.warning("HEDGE alert sent: KOSPI %+.2f%%", index_change_rate)
     except Exception as exc:
         logger.error("Index data fetch failed: %s", exc)
-        notifier.send_error(f"지수 데이터 조회 실패: {exc}")
+        notifier.send_error(f"Index data fetch failed: {exc}")
 
     # ------------------------------------------------------------------
     # Step 2 — Per-symbol signal evaluation
@@ -174,7 +174,7 @@ def run_cycle(
 
         except Exception as exc:
             logger.error("Error processing symbol %s: %s", symbol, exc)
-            notifier.send_error(f"[{symbol}] 처리 중 오류 발생: {exc}")
+            notifier.send_error(f"[{symbol}] Error processing symbol: {exc}")
 
     logger.info("=== Monitoring cycle complete ===")
 

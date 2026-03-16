@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import backtrader as bt
 import pandas as pd
@@ -39,7 +39,7 @@ from config.settings import Settings
 _logger = logging.getLogger(__name__)
 
 # KRX standard one-way commission rate
-_KRX_COMMISSION = 0.00015  # 0.015 %
+_KRX_COMMISSION: float = 0.00015  # 0.015 %
 
 
 @dataclass
@@ -110,17 +110,17 @@ def run_backtest(
     if settings is None:
         settings = Settings()
 
-    df = _normalise_columns(ohlcv_df)
+    df: pd.DataFrame = _normalise_columns(ohlcv_df)
 
     if df.empty:
         raise ValueError("ohlcv_df is empty — nothing to backtest.")
 
-    required = {"open", "high", "low", "close", "volume"}
-    missing = required - set(df.columns)
+    required: set = {"open", "high", "low", "close", "volume"}
+    missing: set = required - set(df.columns)
     if missing:
         raise ValueError(f"ohlcv_df is missing columns: {missing}")
 
-    cerebro = bt.Cerebro(stdstats=False)
+    cerebro: bt.Cerebro = bt.Cerebro(stdstats=False)
 
     cerebro.addstrategy(
         KimBeggarStrategy,
@@ -144,17 +144,17 @@ def run_backtest(
         len(df),
         initial_cash,
     )
-    results = cerebro.run()
-    final_value = cerebro.broker.getvalue()
+    results: List[bt.Strategy] = cerebro.run()
+    final_value: float = cerebro.broker.getvalue()
 
     # --- Parse trade analyser results ----------------------------------
-    trade_stats = results[0].analyzers.trades.get_analysis()
-    total = trade_stats.get("total", {}).get("total", 0)
-    won = trade_stats.get("won", {}).get("total", 0)
-    lost = trade_stats.get("lost", {}).get("total", 0)
-    win_rate = won / total if total > 0 else None
+    trade_stats: Dict[str, Any] = results[0].analyzers.trades.get_analysis()
+    total: int = trade_stats.get("total", {}).get("total", 0)
+    won: int = trade_stats.get("won", {}).get("total", 0)
+    lost: int = trade_stats.get("lost", {}).get("total", 0)
+    win_rate: Optional[float] = won / total if total > 0 else None
 
-    pnl = final_value - initial_cash
+    pnl: float = final_value - initial_cash
 
     result = BacktestResult(
         initial_cash=initial_cash,
@@ -187,6 +187,6 @@ def _normalise_columns(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         New DataFrame with lowercase column names.
     """
-    renamed = df.copy()
-    renamed.columns = [c.lower() for c in renamed.columns]
+    renamed: pd.DataFrame = df.copy()
+    renamed.columns = pd.Index([c.lower() for c in renamed.columns])
     return renamed
