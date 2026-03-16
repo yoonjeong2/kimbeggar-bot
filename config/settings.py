@@ -115,6 +115,7 @@ class Settings:
         self.kis_app_key = os.getenv("KIS_APP_KEY", self.kis_app_key)
         self.kis_app_secret = os.getenv("KIS_APP_SECRET", self.kis_app_secret)
         self.kis_account_no = os.getenv("KIS_ACCOUNT_NO", self.kis_account_no)
+        self.kis_is_real = os.getenv("KIS_IS_REAL", "false").lower() == "true"
         self.kakao_rest_api_key = os.getenv(
             "KAKAO_REST_API_KEY", self.kakao_rest_api_key
         )
