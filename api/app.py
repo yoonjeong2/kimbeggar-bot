@@ -423,9 +423,9 @@ _HTML = """\
   }
 
   const SCR_SRC = {
-    drop_rank:   ["b-dip",   "\uD83E\uDE78 DIPPED"],
-    volume_rank: ["b-surge", "\u26A1 SURGE"],
-    fallback:    ["b-scan",  "\uD83D\uDCE1 SCAN"],
+    drop_rank:   ["b-dip",   "\\uD83E\\uDE78 DIPPED"],
+    volume_rank: ["b-surge", "\\u26A1 SURGE"],
+    fallback:    ["b-scan",  "\\uD83D\\uDCE1 SCAN"],
   };
   function scrBadge(src) {
     const [cls, lbl] = SCR_SRC[src] || ["b-scan", src];
