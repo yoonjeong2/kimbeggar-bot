@@ -1,14 +1,14 @@
-"""Trading signal detection engine.
+"""퀀텀 점프 — 공격적 시그널 탐지 엔진 (하이리스크 하이리턴).
 
-Combines RSI and moving-average crossover indicators to generate actionable
-trading signals for domestic equities.
+비대칭 페이오프를 극대화하기 위해 과매도 즉시 진입 + 과매수/추세반전 즉시 익절
+전략을 구현합니다.
 
 Signal priority (highest → lowest)
 -----------------------------------
-1. STOP_LOSS — price fell below the configured stop-loss threshold
-2. SELL      — RSI overbought AND dead cross
-3. BUY       — RSI oversold AND golden cross
-4. HOLD      — none of the above conditions are met
+1. STOP_LOSS — 진입가 대비 설정 비율 이상 손실 시 즉시 손절
+2. SELL      — RSI 과매수(≥70) 도달  OR  데드크로스 발생 (둘 중 하나)
+3. BUY       — RSI 과매도(≤30) 도달 (MA 추세 확인 없이 즉시 진입)
+4. HOLD      — 위 조건 미충족
 
 Index-level HEDGE signals are evaluated separately in ``main.py`` so that a
 single market check covers all monitored symbols at once.
@@ -197,25 +197,38 @@ class SignalEngine:
                 ma_long=current_long_ma,
             )
 
-        # 2. Sell signal — RSI overbought + dead cross
-        if current_rsi is not None and self.check_sell_signal(
-            close, rsi_series, short_ma, long_ma
-        ):
-            return Signal(
-                symbol=symbol,
-                signal_type=SignalType.SELL,
-                price=current_price,
-                reason=(
-                    f"Sell: RSI={current_rsi:.1f} (≥{self._settings.rsi_overbought}) "
-                    f"+ dead cross (MA{self._settings.ma_short} crossed below "
-                    f"MA{self._settings.ma_long})"
-                ),
-                rsi=current_rsi,
-                ma_short=current_short_ma,
-                ma_long=current_long_ma,
-            )
+        # 2. Sell signal — RSI overbought OR dead cross (퀀텀점프: 둘 중 하나라도 → 즉시 익절)
+        if current_rsi is not None:
+            sell_trigger = self.check_sell_signal(close, rsi_series, short_ma, long_ma)
+            if sell_trigger:
+                rsi_hit = float(rsi_series.iloc[-1]) >= self._settings.rsi_overbought
+                dead = bool(detect_dead_cross(short_ma, long_ma).iloc[-1])
+                if rsi_hit and dead:
+                    sell_reason = (
+                        f"Sell: RSI={current_rsi:.1f} (≥{self._settings.rsi_overbought})"
+                        f" + dead cross (MA{self._settings.ma_short}<MA{self._settings.ma_long})"
+                    )
+                elif rsi_hit:
+                    sell_reason = (
+                        f"Sell: RSI={current_rsi:.1f} 과매수 도달"
+                        f" (≥{self._settings.rsi_overbought})"
+                    )
+                else:
+                    sell_reason = (
+                        f"Sell: dead cross (MA{self._settings.ma_short}"
+                        f"<MA{self._settings.ma_long}), RSI={current_rsi:.1f}"
+                    )
+                return Signal(
+                    symbol=symbol,
+                    signal_type=SignalType.SELL,
+                    price=current_price,
+                    reason=sell_reason,
+                    rsi=current_rsi,
+                    ma_short=current_short_ma,
+                    ma_long=current_long_ma,
+                )
 
-        # 3. Buy signal — RSI oversold + golden cross
+        # 3. Buy signal — RSI oversold 단독 진입 (퀀텀점프: 과매도 즉시 진입, 추세 확인 불필요)
         if current_rsi is not None and self.check_buy_signal(
             close, rsi_series, short_ma, long_ma
         ):
@@ -224,9 +237,8 @@ class SignalEngine:
                 signal_type=SignalType.BUY,
                 price=current_price,
                 reason=(
-                    f"Buy: RSI={current_rsi:.1f} (≤{self._settings.rsi_oversold}) "
-                    f"+ golden cross (MA{self._settings.ma_short} crossed above "
-                    f"MA{self._settings.ma_long})"
+                    f"Buy: RSI={current_rsi:.1f} 과매도 진입"
+                    f" (≤{self._settings.rsi_oversold}) — 퀀텀점프 공격적 진입"
                 ),
                 rsi=current_rsi,
                 ma_short=current_short_ma,
@@ -251,28 +263,27 @@ class SignalEngine:
         short_ma: pd.Series,
         long_ma: pd.Series,
     ) -> bool:
-        """Return ``True`` when RSI is oversold AND a golden cross just occurred.
+        """퀀텀점프 BUY: RSI 과매도 단독 진입 (추세 확인 불필요).
 
         Condition::
 
-            RSI[-1] <= rsi_oversold  AND  golden_cross[-1] is True
+            RSI[-1] <= rsi_oversold
+
+        MA 필터를 제거해 과매도 구간 즉시 진입 — 하이리스크 하이리턴.
 
         Args:
             prices:   Close-price series (unused directly, kept for API symmetry).
             rsi:      RSI series aligned with ``prices``.
-            short_ma: Short-window SMA series.
-            long_ma:  Long-window SMA series.
+            short_ma: Short-window SMA series (unused, kept for API symmetry).
+            long_ma:  Long-window SMA series (unused, kept for API symmetry).
 
         Returns:
-            ``True`` if both conditions are simultaneously satisfied on the
-            most recent bar.
+            ``True`` when RSI is at or below the oversold threshold.
         """
-        if rsi.isna().iloc[-1] or short_ma.isna().iloc[-1] or long_ma.isna().iloc[-1]:
+        if rsi.isna().iloc[-1]:
             return False
 
-        rsi_oversold = float(rsi.iloc[-1]) <= self._settings.rsi_oversold
-        golden_cross_now = bool(detect_golden_cross(short_ma, long_ma).iloc[-1])
-        return rsi_oversold and golden_cross_now
+        return float(rsi.iloc[-1]) <= self._settings.rsi_oversold
 
     def check_sell_signal(
         self,
@@ -281,11 +292,13 @@ class SignalEngine:
         short_ma: pd.Series,
         long_ma: pd.Series,
     ) -> bool:
-        """Return ``True`` when RSI is overbought AND a dead cross just occurred.
+        """퀀텀점프 SELL: RSI 과매수 도달 OR 데드크로스 발생 시 즉시 익절.
 
         Condition::
 
-            RSI[-1] >= rsi_overbought  AND  dead_cross[-1] is True
+            RSI[-1] >= rsi_overbought  OR  dead_cross[-1] is True
+
+        둘 중 하나라도 충족되면 포지션 청산 — 빠른 수익 확정.
 
         Args:
             prices:   Close-price series (unused directly, kept for API symmetry).
@@ -294,15 +307,14 @@ class SignalEngine:
             long_ma:  Long-window SMA series.
 
         Returns:
-            ``True`` if both conditions are simultaneously satisfied on the
-            most recent bar.
+            ``True`` if RSI is overbought OR a dead cross just occurred.
         """
         if rsi.isna().iloc[-1] or short_ma.isna().iloc[-1] or long_ma.isna().iloc[-1]:
             return False
 
         rsi_overbought = float(rsi.iloc[-1]) >= self._settings.rsi_overbought
         dead_cross_now = bool(detect_dead_cross(short_ma, long_ma).iloc[-1])
-        return rsi_overbought and dead_cross_now
+        return rsi_overbought or dead_cross_now
 
     def check_stop_loss(self, current_price: float, entry_price: float) -> bool:
         """Return ``True`` when the position has fallen below the stop-loss floor.
