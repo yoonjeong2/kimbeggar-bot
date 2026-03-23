@@ -394,6 +394,14 @@ _HTML = """\
   function renderSig(sigs, names) {
     if (names) _names = Object.assign(_names, names);
     const el = document.getElementById("sig-body");
+    // 중복 제거: symbol + signal_type 기준 최신 1건만 표시
+    const seen = new Set();
+    sigs = sigs.filter(s => {
+      const key = (s.symbol || "") + "|" + (s.signal_type || "");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     document.getElementById("st-sig").textContent = sigs.length;
     if (!sigs.length) {
       el.innerHTML = '<div class="empty">\uC2E0\uD638 \uC5C6\uC74C \u2014 \uC2DC\uC7A5\uC774 \uC544\uC9C1 \uCDA9\uBD84\uD788 \uBB34\uB108\uC9C0\uC9C0 \uC54A\uC558\uB2E4</div>';
